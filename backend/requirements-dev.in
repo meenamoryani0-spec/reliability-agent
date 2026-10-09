@@ -1,0 +1,6 @@
+-r requirements.in
+httpx>=0.27,<1
+# Current Starlette TestClient prefers httpx2; HTTPX remains the planned adapter client.
+httpx2>=2,<3
+pytest>=8,<10
+ruff>=0.8,<1
