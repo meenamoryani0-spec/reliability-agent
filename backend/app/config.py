@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """Validate configuration once during application creation.
 
     Environment variables override the repository-root .env file. Provider
-    secrets are intentionally absent until the integrations are implemented.
+    secrets are masked and never included in health responses or startup logs.
     """
 
     model_config = SettingsConfigDict(
@@ -23,6 +23,24 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    nebius_api_key: SecretStr | None = Field(default=None, repr=False)
+    nebius_model: str = Field(
+        default="nvidia/Nemotron-3_5-Lightning",
+        pattern=r"^nvidia/[A-Za-z0-9][A-Za-z0-9._-]{0,150}$",
+    )
+    nebius_timeout_seconds: float = Field(default=45, ge=1, le=60)
+    nebius_max_tokens: int = Field(default=2048, ge=128, le=4096)
+
+    @field_validator("nebius_api_key", mode="before")
+    @classmethod
+    def normalize_api_key(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            if not value.isascii() or any(character.isspace() for character in value):
+                raise ValueError("API key must be ASCII without whitespace")
+        return value
 
     @field_validator("log_level", mode="before")
     @classmethod

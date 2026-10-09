@@ -1,6 +1,6 @@
 # AI Reliability Agent
 
-Phase 1 foundation for a reliability agent that will investigate website,
+Backend foundation and Nebius client for a reliability agent that will investigate website,
 n8n/business automation, and infrastructure failures using operational evidence.
 
 ## Current scope
@@ -10,10 +10,13 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Application lifecycle logging without configuration dumps or request bodies.
 - Automated endpoint/configuration tests, lint, and formatting checks.
 - Locked runtime and development dependencies with distribution hashes.
+- A bounded Nebius text-inference client and an opt-in live connectivity command.
 
 `/health` reports **backend process liveness only**. It does not claim that
-Nebius, n8n, a website, or a database is connected or healthy. Those integrations
-have not been implemented. No provider credentials are required in Phase 1.
+Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
+is implemented and mock-tested; its real connectivity test still needs an API
+key. Website, n8n, and database adapters have not been implemented. No provider
+credentials are required to start the backend or run the automated tests.
 
 ## Layout on this computer
 
@@ -57,7 +60,8 @@ Copy-Item .env.example .env
 The app loads `.env` from the repository root, independent of the shell's
 working directory. Environment variables take precedence. Invalid values and
 unknown dotenv entries fail configuration validation. `.env` is ignored by Git.
-Provider variables will be added alongside their actual integrations.
+The Nebius variables are defined in `.env.example`; later providers will be added
+alongside their actual integrations.
 
 ## Run and verify
 
@@ -112,11 +116,35 @@ uv pip compile backend\requirements-dev.in --constraint backend\requirements.txt
 .\scripts\test.ps1
 ```
 
-## Next milestone
+## Nebius connection — Phase 2
 
-Phase 2: verify current official Nebius API documentation and the hackathon's
-eligible Nemotron model, implement the client, and smoke-test a real request
-with supplied credentials. Do not claim connectivity based on mocked tests.
+Official documentation checked on 9 October 2026 identifies the public model
+`nvidia/Nemotron-3_5-Lightning` and the REST API base
+`https://api.tokenfactory.nebius.com/v1/`. The client uses HTTPX directly.
+
+Create a key through [Nebius Token Factory](https://tokenfactory.nebius.com/),
+then edit the ignored repository-root `.env` locally. Put the key after
+`NEBIUS_API_KEY=`; never paste it into chat or commit it. A blank `.env` has been
+created on this computer, without overwriting an existing configuration.
+
+```powershell
+.\scripts\nebius-smoke.ps1
+```
+
+The command checks the selected model using `GET /v1/models`, then makes one
+`POST /v1/chat/completions` request with a static greeting prompt. This can
+consume provider credits. It prints only PASS and model metadata; neither the
+key nor the response text is printed. No automatic retries are performed.
+
+Missing credentials, authorization failures, rate limiting, timeouts, malformed
+payloads, oversized output, truncated completions, empty text, and a mismatched
+model produce a sanitized NOT_VERIFIED reason. These are connection/check
+failures and are not diagnoses of a monitored service.
+
+**Phase 2 is not complete until the real request passes.** After it does, the
+next proposed phase is website health checks. See `docs/PHASE-2.md` for evidence.
+Local async tests require loopback socket access on Windows; this tool's
+restricted execution environment required network permission for asyncio startup.
 
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
@@ -129,5 +157,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` for the actual validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` and `docs/PHASE-2.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

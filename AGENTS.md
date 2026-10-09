@@ -4,7 +4,7 @@ Read README.md and docs/HANDOFF.md before extending the application.
 
 - Keep all new project files, virtual environments, caches, and logs on D:.
 - Build incrementally; complete and verify each phase before starting the next.
-- Current scope is Phase 1 only. Phase 2 requires fresh official Nebius/model verification.
+- Phase 1 is verified. Current scope is Phase 2; do not advance without a successful real Nebius smoke test.
 - Follow the handoff's Python/FastAPI backend-first order; no empty future modules.
 - Check current official provider documentation before implementing API adapters.
 - Keep credentials in environment variables; never commit .env or print secrets.

@@ -8,6 +8,8 @@ from app.config import PROJECT_ROOT, Settings
 def clean_app_environment(monkeypatch):
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
+    for name in ("NEBIUS_API_KEY", "NEBIUS_MODEL", "NEBIUS_TIMEOUT_SECONDS", "NEBIUS_MAX_TOKENS"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_defaults_need_no_credentials():
@@ -48,3 +50,26 @@ def test_example_configuration_is_loadable():
 def test_default_dotenv_path_is_independent_of_working_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert Settings.model_config["env_file"] == PROJECT_ROOT / ".env"
+
+
+def test_key_is_masked_and_blank_key_is_unconfigured():
+    settings = Settings(_env_file=None, nebius_api_key="sentinel-private-value")
+    assert "sentinel-private-value" not in repr(settings)
+    assert "sentinel-private-value" not in settings.model_dump_json()
+    assert Settings(_env_file=None, nebius_api_key=" ").nebius_api_key is None
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"nebius_model": "other-provider/model"},
+        {"nebius_max_tokens": 0},
+        {"nebius_max_tokens": 100000},
+        {"nebius_timeout_seconds": 0},
+        {"nebius_timeout_seconds": 600},
+        {"nebius_api_key": "key\nwith-whitespace"},
+    ],
+)
+def test_unsafe_nebius_configuration_is_rejected(values):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **values)
