@@ -1,6 +1,6 @@
 # AI Reliability Agent
 
-Backend foundation and Nebius client for a reliability agent that will investigate website,
+Backend, website checks, and Nebius client for a reliability agent that will investigate website,
 n8n/business automation, and infrastructure failures using operational evidence.
 
 ## Current scope
@@ -11,11 +11,13 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Automated endpoint/configuration tests, lint, and formatting checks.
 - Locked runtime and development dependencies with distribution hashes.
 - A bounded Nebius text-inference client and an opt-in live connectivity command.
+- Registered website HTTP/endpoint, latency, DNS, and TLS checks with normalized evidence.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
 is implemented and mock-tested; its real connectivity test still needs an API
-key. Website, n8n, and database adapters have not been implemented. No provider
+key. Website checks pass local fixtures and a public `example.com` smoke check.
+n8n and database adapters have not been implemented. No provider
 credentials are required to start the backend or run the automated tests.
 
 ## Layout on this computer
@@ -97,7 +99,8 @@ deployment and its security configuration remain future work.
 This runs pytest, Ruff lint, and Ruff formatting validation. Pytest temporary
 files are placed under `work/pytest`; that directory is disposable test output.
 The smoke script starts a real Uvicorn subprocess on an available loopback port,
-checks health, OpenAPI, and docs over HTTP, and stops the process in cleanup.
+checks health, OpenAPI, docs, the website registry, and rejected check requests
+over HTTP, and stops the process in cleanup.
 Its server log is in `work/logs/smoke-server.log`. This also supports tool sessions
 where a separately launched server is unreachable from another execution.
 
@@ -143,13 +146,80 @@ failures and are not diagnoses of a monitored service.
 
 **Local development does not require a Nebius API key.** Following the user's
 10 October 2026 clarification, development can continue with mocked provider
-responses and local fixtures. The next build phase is website health checks.
+responses and local fixtures. Website checks are implemented; the next phase
+is browser business-flow tests with Playwright.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
 See `docs/PHASE-2.md` for evidence.
 Local async tests require loopback socket access on Windows; this tool's
 restricted execution environment required network permission for asyncio startup.
+
+## Website checks — Phase 3
+
+Website checks run in ordinary Python and do not call Nebius or require an API key.
+Add operator-controlled targets to `.env`, then restart the backend:
+
+```dotenv
+WEBSITE_TARGETS=[{"id":"demo","url":"https://your-site.example/health","expected_statuses":[200],"latency_warning_ms":2000}]
+WEBSITE_DNS_NAMESERVERS=[]
+```
+
+Replace the example hostname with a real public website. Register separate IDs
+for a homepage and an API health endpoint if both need checking. Up to 25 targets
+are supported. Targets require a DNS hostname, HTTP or HTTPS, and its default
+port; credentials, query strings, fragments, literal IPs, and local names are
+rejected. The API accepts a registered ID, never an arbitrary URL.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/services/websites
+Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/checks/websites/demo?kind=http'
+Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/checks/websites/demo?kind=dns'
+Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/checks/websites/demo?kind=ssl'
+```
+
+Each result includes the component, check type, status, severity, safe summary,
+evidence, timestamp, and optional latency. `healthy` is true for HEALTHY, false
+for UNHEALTHY, and null for DEGRADED, UNKNOWN, or CHECK_FAILED.
+
+| Check | What it verifies |
+| --- | --- |
+| HTTP | Expected success status and time through DNS, connection, redirects, and response headers; response bodies are not read |
+| DNS | A/AAAA lookup using the OS-configured resolver, with every returned address checked against the public-destination policy |
+| TLS | Trusted certificate chain and hostname, expiry warning within 30 days, negotiated TLS version |
+
+All answers must be public addresses. HTTP/TLS probes use the first sorted
+address, preferring IPv4, with the original Host header and TLS SNI. Addresses
+are pinned through at most three same-host redirects; HTTPS downgrades and
+cross-host redirects are rejected. Checks have a 10-second total deadline,
+with up to one extra second for TLS cleanup. There is no automatic retry.
+
+Expected status defaults to 200; only 200–299 statuses can be configured.
+Unexpected statuses such as 404/500 are UNHEALTHY. A slow expected response or
+429 is DEGRADED; 401/403 is CHECK_FAILED because this probe has no credentials.
+NXDOMAIN/no address records is UNHEALTHY. Resolver failures, unsafe destinations,
+connection errors, and timeouts are CHECK_FAILED. Plain HTTP has UNKNOWN TLS
+status. A certificate verification failure is UNHEALTHY; the checker does not
+invent expiry details when the TLS handshake cannot provide a verified certificate.
+
+The optional `WEBSITE_DNS_NAMESERVERS` JSON list overrides DNS **inside this app**,
+using up to three public DNS IPs. Empty uses the OS configuration. In this tool
+sandbox, dnspython found no OS nameservers; `dns_resolver_not_configured` identifies
+that problem. The public smoke check passed with `["1.1.1.1"]`. This does not
+change Windows DNS settings.
+
+Run an opt-in live check of a configured target:
+
+```powershell
+.\scripts\website-smoke.ps1 -TargetId demo
+```
+
+It prints normalized evidence and exits successfully only when DNS, HTTP, and
+TLS are all HEALTHY. HTTP-only targets therefore report ATTENTION for their
+UNKNOWN TLS check. Scheduled monitoring, persistence, browser flows, and
+business-process diagnosis are later phases. Checks of one selected address
+do not establish the health of every server behind a hostname.
+See `docs/PHASE-3.md` for actual validation results.
 
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
@@ -162,5 +232,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` and `docs/PHASE-2.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md`, `docs/PHASE-2.md`, and `docs/PHASE-3.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

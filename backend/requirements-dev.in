@@ -3,3 +3,5 @@
 httpx2>=2,<3
 pytest>=8,<10
 ruff>=0.8,<1
+# Generate disposable certificates for real local TLS tests.
+cryptography>=43

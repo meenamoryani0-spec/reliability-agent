@@ -18,7 +18,12 @@ with socket.socket() as reserved_socket:
     reserved_socket.bind(("127.0.0.1", 0))
     port = reserved_socket.getsockname()[1]
 
-server_environment = {**os.environ, "ENVIRONMENT": "test", "LOG_LEVEL": "INFO"}
+server_environment = {
+    **os.environ,
+    "ENVIRONMENT": "test",
+    "LOG_LEVEL": "INFO",
+    "WEBSITE_TARGETS": "[]",
+}
 with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_log:
     server = subprocess.Popen(
         [
@@ -66,6 +71,16 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                 raise RuntimeError("Health is missing from OpenAPI")
             docs = client.get("/docs")
             docs.raise_for_status()
+            websites = client.get("/services/websites")
+            websites.raise_for_status()
+            if websites.json() != []:
+                raise RuntimeError("Smoke test must start with no configured website targets")
+            missing = client.post("/checks/websites/unconfigured")
+            if missing.status_code != 404:
+                raise RuntimeError("Unknown website target was not rejected")
+            invalid = client.post("/checks/websites/unconfigured?kind=shell")
+            if invalid.status_code != 422:
+                raise RuntimeError("Unsupported check kind was not rejected")
             print(
                 json.dumps(
                     {
@@ -73,6 +88,9 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                         "health_status": health.status_code,
                         "body": health.json(),
                         "docs_status": docs.status_code,
+                        "website_list_status": websites.status_code,
+                        "unconfigured_target_status": missing.status_code,
+                        "invalid_check_kind_status": invalid.status_code,
                     }
                 )
             )

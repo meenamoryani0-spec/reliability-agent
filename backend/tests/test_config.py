@@ -8,7 +8,14 @@ from app.config import PROJECT_ROOT, Settings
 def clean_app_environment(monkeypatch):
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
-    for name in ("NEBIUS_API_KEY", "NEBIUS_MODEL", "NEBIUS_TIMEOUT_SECONDS", "NEBIUS_MAX_TOKENS"):
+    for name in (
+        "NEBIUS_API_KEY",
+        "NEBIUS_MODEL",
+        "NEBIUS_TIMEOUT_SECONDS",
+        "NEBIUS_MAX_TOKENS",
+        "WEBSITE_TARGETS",
+        "WEBSITE_DNS_NAMESERVERS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 

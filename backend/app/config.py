@@ -1,8 +1,11 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.tools.models import WebsiteTarget
+from app.tools.targets import validate_addresses
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,6 +33,19 @@ class Settings(BaseSettings):
     )
     nebius_timeout_seconds: float = Field(default=45, ge=1, le=60)
     nebius_max_tokens: int = Field(default=2048, ge=128, le=4096)
+    website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
+    website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
+
+    @field_validator("website_dns_nameservers")
+    @classmethod
+    def validate_nameservers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(validate_addresses(list(value))) if value else ()
+
+    @model_validator(mode="after")
+    def validate_target_ids(self) -> "Settings":
+        if len({target.id for target in self.website_targets}) != len(self.website_targets):
+            raise ValueError("Website target IDs must be unique")
+        return self
 
     @field_validator("nebius_api_key", mode="before")
     @classmethod
