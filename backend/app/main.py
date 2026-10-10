@@ -4,17 +4,22 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
 from app.config import Settings
 from app.logging import configure_logging
+from app.tools.browser import BrowserChecker
 from app.tools.website import WebsiteChecker
 
 logger = logging.getLogger("reliability_agent")
 
 
 def create_app(
-    settings: Settings | None = None, *, website_checker: WebsiteChecker | None = None
+    settings: Settings | None = None,
+    *,
+    website_checker: WebsiteChecker | None = None,
+    browser_checker: BrowserChecker | None = None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
 
@@ -27,7 +32,7 @@ def create_app(
 
     application = FastAPI(
         title="AI Reliability Agent",
-        description="Read-only website checks. Health reports backend liveness only.",
+        description="Website checks and synthetic browser flows. Health is backend liveness only.",
         version="0.1.0",
         lifespan=lifespan,
         docs_url=None if config.environment == "production" else "/docs",
@@ -39,8 +44,10 @@ def create_app(
     application.state.website_checker = website_checker or WebsiteChecker(
         nameservers=config.website_dns_nameservers
     )
+    application.state.browser_checker = browser_checker or BrowserChecker()
     application.include_router(health_router)
     application.include_router(checks_router)
+    application.include_router(browser_router)
     return application
 
 

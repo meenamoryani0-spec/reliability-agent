@@ -12,6 +12,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Locked runtime and development dependencies with distribution hashes.
 - A bounded Nebius text-inference client and an opt-in live connectivity command.
 - Registered website HTTP/endpoint, latency, DNS, and TLS checks with normalized evidence.
+- Playwright/Chromium synthetic booking flows with UI verification and frontend error counts.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -146,8 +147,8 @@ failures and are not diagnoses of a monitored service.
 
 **Local development does not require a Nebius API key.** Following the user's
 10 October 2026 clarification, development can continue with mocked provider
-responses and local fixtures. Website checks are implemented; the next phase
-is browser business-flow tests with Playwright.
+responses and local fixtures. Website checks and synthetic Playwright booking
+flows are implemented; the next phase is the read-only n8n integration.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -216,10 +217,73 @@ Run an opt-in live check of a configured target:
 
 It prints normalized evidence and exits successfully only when DNS, HTTP, and
 TLS are all HEALTHY. HTTP-only targets therefore report ATTENTION for their
-UNKNOWN TLS check. Scheduled monitoring, persistence, browser flows, and
+UNKNOWN TLS check. Scheduled monitoring, persistence, customer browser flows, and
 business-process diagnosis are later phases. Checks of one selected address
 do not establish the health of every server behind a hostname.
 See `docs/PHASE-3.md` for actual validation results.
+
+## Browser business-flow checks — Phase 4
+
+Install the pinned dependencies with the existing setup command, then install
+Chromium's headless shell on D: (no Chrome installation or API key needed):
+
+```powershell
+.\scripts\browser-install.ps1
+.\scripts\test.ps1
+.\scripts\browser-smoke.ps1
+```
+
+The browser smoke starts a real Uvicorn server, calls both flow endpoints over
+HTTP, checks their expected statuses, and stops the server. Sanitized browser
+results are saved to `work/evidence/browser-smoke.json`.
+
+With the backend running, these are also available in local API documentation:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/services/browser-flows
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/browser-flows/booking-healthy
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/browser-flows/booking-crm-failure
+```
+
+| Flow | Evidence required | Status |
+| --- | --- | --- |
+| `booking-healthy` | Navigation 200, booking POST 200, visible confirmation, no frontend errors | HEALTHY |
+| `booking-crm-failure` | Navigation 200, simulated booking POST 502, visible failure, no confirmation | UNHEALTHY |
+
+These are **synthetic fixtures in a real Chromium browser**. HTML and API
+responses are fulfilled locally by Playwright at a fixed `.test` origin;
+no website, CRM, calendar, WhatsApp service, or n8n instance is contacted.
+Every other routed request is aborted. Service workers and downloads are
+disabled. The form uses a synthetic customer and never creates a real booking.
+The simulated authentication rejection is fixture evidence, not a verified
+root cause in any customer's system.
+
+Each check launches an isolated Python worker and fresh browser context, fills
+the form, submits it, and verifies visible UI output as well as response status.
+Console errors and uncaught page errors are counted. Raw error messages, page
+content, exception details, screenshots, and traces are not returned or saved.
+An otherwise successful flow with frontend errors is DEGRADED.
+Missing Chromium, deadlines, blocked requests, or unverified UI results are
+CHECK_FAILED with `healthy: null`, rather than evidence a customer service is broken.
+
+Only these two fixed flow IDs are accepted. Demo endpoints return 404 in
+production; configurable customer flows and their network/write policies remain
+future work. One worker may run per backend process; overlapping checks report
+`browser_busy`. The worker has a 30-second deadline, followed by up to 10 seconds
+for termination cleanup. Windows uses process-tree termination on timeout.
+The subprocess avoids coupling Playwright to Uvicorn's Windows event loop and
+inherits no provider keys or proxy settings.
+
+Browser binaries, disposable browser profiles, temporary files, and Python caches
+use ignored `work/` directories on D:. In this Windows sandbox, Node archive
+extraction failed with `EPERM` at `realpath`. If the normal installer fails that
+way, run `.\scripts\browser-install.ps1 -UseArchiveFallback`. This downloads and
+extracts the exact official CDN archives reported by the installed Playwright
+CLI into the same D: directory, with archive path/size validation. No SDK files,
+OS permissions, or browser launch security settings are patched.
+Chromium must be installed before running the full test suite; browser tests fail
+if the browser is missing, rather than silently skipping real execution.
+See `docs/PHASE-4.md` for verified milestone evidence.
 
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
@@ -232,5 +296,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md`, `docs/PHASE-2.md`, and `docs/PHASE-3.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md`, `docs/PHASE-2.md`, `docs/PHASE-3.md`, and `docs/PHASE-4.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

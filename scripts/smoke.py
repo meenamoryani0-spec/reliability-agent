@@ -81,6 +81,27 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
             invalid = client.post("/checks/websites/unconfigured?kind=shell")
             if invalid.status_code != 422:
                 raise RuntimeError("Unsupported check kind was not rejected")
+            browser_results = []
+            if "--browser" in sys.argv:
+                flows = client.get("/services/browser-flows")
+                flows.raise_for_status()
+                if len(flows.json()) != 2:
+                    raise RuntimeError("Expected two synthetic browser flows")
+                for flow_id, status in [
+                    ("booking-healthy", "HEALTHY"),
+                    ("booking-crm-failure", "UNHEALTHY"),
+                ]:
+                    response = client.post(f"/checks/browser-flows/{flow_id}", timeout=45)
+                    response.raise_for_status()
+                    result = response.json()
+                    if result["status"] != status:
+                        raise RuntimeError("Browser flow did not produce expected evidence")
+                    browser_results.append(result)
+                output_directory = project_root / "work" / "evidence"
+                output_directory.mkdir(parents=True, exist_ok=True)
+                (output_directory / "browser-smoke.json").write_text(
+                    json.dumps(browser_results, indent=2), encoding="utf-8"
+                )
             print(
                 json.dumps(
                     {
@@ -91,6 +112,7 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                         "website_list_status": websites.status_code,
                         "unconfigured_target_status": missing.status_code,
                         "invalid_check_kind_status": invalid.status_code,
+                        "browser_flows": browser_results,
                     }
                 )
             )
