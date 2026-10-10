@@ -3,8 +3,10 @@
 Read README.md and docs/HANDOFF.md before extending the application.
 
 - Keep all new project files, virtual environments, caches, and logs on D:.
-- Build incrementally; complete and verify each phase before starting the next.
-- Phase 1 is verified. Current scope is Phase 2; do not advance without a successful real Nebius smoke test.
+- Build incrementally and run each component and its local tests before extending it.
+- User clarification on 2026-10-10: API credentials must not block local development. Use mocks/local fixtures; defer real provider tests until credentials are supplied.
+- Phase 1 is verified; the Phase 2 client passes mocked tests. Real Nebius connectivity remains unverified. The next build phase is website checks.
+- Do not claim real integrations or the complete application work until live provider and end-to-end validation pass.
 - Follow the handoff's Python/FastAPI backend-first order; no empty future modules.
 - Check current official provider documentation before implementing API adapters.
 - Keep credentials in environment variables; never commit .env or print secrets.

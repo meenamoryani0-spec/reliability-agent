@@ -141,8 +141,13 @@ payloads, oversized output, truncated completions, empty text, and a mismatched
 model produce a sanitized NOT_VERIFIED reason. These are connection/check
 failures and are not diagnoses of a monitored service.
 
-**Phase 2 is not complete until the real request passes.** After it does, the
-next proposed phase is website health checks. See `docs/PHASE-2.md` for evidence.
+**Local development does not require a Nebius API key.** Following the user's
+10 October 2026 clarification, development can continue with mocked provider
+responses and local fixtures. The next build phase is website health checks.
+The Nebius client is implemented and mock-tested; real connectivity remains
+unverified until the live request passes. Require live integration and end-to-end
+validation before presenting the complete application as working.
+See `docs/PHASE-2.md` for evidence.
 Local async tests require loopback socket access on Windows; this tool's
 restricted execution environment required network permission for asyncio startup.
 

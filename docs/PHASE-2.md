@@ -8,7 +8,7 @@ Verified documentation and implementation on 9 October 2026 (Asia/Calcutta).
 - Ruff lint and formatting: PASS.
 - Real local backend HTTP smoke: PASS (health, docs, OpenAPI).
 - Nebius live command: **NOT_VERIFIED — missing_api_key**.
-- No real provider request has succeeded; Phase 2 remains incomplete.
+- No real provider request has succeeded; live integration validation remains pending.
 - No Phase 3 monitoring adapter, tool registry, incident, or agent loop was started.
 
 ## Hackathon findings
@@ -82,7 +82,14 @@ socket pair. A timed traceback identified `socket._fallback_socketpair` as the
 blocking point. After granting network access for the execution environment,
 the async tests and backend smoke passed. The old hung executions were stopped.
 
-## Required next input
+## Development plan clarification — 10 October 2026
 
-Save `NEBIUS_API_KEY` in the ignored local `.env` and run the live command.
-Do not claim phase completion or continue to Phase 3 based on mocked tests.
+The user clarified that we are still building and credentials should not be a
+prerequisite for local development. This supersedes the earlier instruction to
+wait for a successful real Nebius request before advancing the build.
+
+Continue with Phase 3 website checks using local fixtures and mocked external
+responses. Keep real Nebius connectivity explicitly unverified. When credentials
+are available, save `NEBIUS_API_KEY` in the ignored local `.env` and run the live
+command. Complete real integration and end-to-end tests before claiming the
+application works with external services.
