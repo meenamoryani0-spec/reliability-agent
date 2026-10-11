@@ -5,6 +5,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.tools.models import WebsiteTarget
+from app.tools.n8n_models import validate_n8n_url
 from app.tools.targets import validate_addresses
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -35,8 +36,20 @@ class Settings(BaseSettings):
     nebius_max_tokens: int = Field(default=2048, ge=128, le=4096)
     website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
     website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
+    n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    n8n_base_url: str | None = Field(default=None, max_length=2048)
+    n8n_api_key: SecretStr | None = Field(default=None, repr=False)
+    n8n_timeout_seconds: float = Field(default=10, ge=1, le=30)
+    n8n_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
 
-    @field_validator("website_dns_nameservers")
+    @field_validator("n8n_base_url", mode="before")
+    @classmethod
+    def validate_n8n_base(cls, value):
+        if value is None or value == "":
+            return None
+        return validate_n8n_url(value)
+
+    @field_validator("website_dns_nameservers", "n8n_dns_nameservers")
     @classmethod
     def validate_nameservers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(validate_addresses(list(value))) if value else ()
@@ -45,9 +58,11 @@ class Settings(BaseSettings):
     def validate_target_ids(self) -> "Settings":
         if len({target.id for target in self.website_targets}) != len(self.website_targets):
             raise ValueError("Website target IDs must be unique")
+        if self.environment == "production" and self.n8n_mode == "fixture":
+            raise ValueError("Synthetic n8n mode is disabled in production")
         return self
 
-    @field_validator("nebius_api_key", mode="before")
+    @field_validator("nebius_api_key", "n8n_api_key", mode="before")
     @classmethod
     def normalize_api_key(cls, value: object) -> object:
         if isinstance(value, str):

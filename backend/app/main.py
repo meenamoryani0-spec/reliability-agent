@@ -7,9 +7,12 @@ from fastapi import FastAPI
 from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
+from app.api.n8n import router as n8n_router
 from app.config import Settings
 from app.logging import configure_logging
 from app.tools.browser import BrowserChecker
+from app.tools.n8n import N8nClient, N8nService
+from app.tools.n8n_fixtures import fixture_client
 from app.tools.website import WebsiteChecker
 
 logger = logging.getLogger("reliability_agent")
@@ -20,6 +23,7 @@ def create_app(
     *,
     website_checker: WebsiteChecker | None = None,
     browser_checker: BrowserChecker | None = None,
+    n8n_service: N8nService | None = None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
 
@@ -45,9 +49,21 @@ def create_app(
         nameservers=config.website_dns_nameservers
     )
     application.state.browser_checker = browser_checker or BrowserChecker()
+    n8n_client = None
+    if config.n8n_mode == "fixture":
+        n8n_client = fixture_client()
+    elif config.n8n_mode == "live" and config.n8n_base_url and config.n8n_api_key:
+        n8n_client = N8nClient(
+            config.n8n_base_url,
+            config.n8n_api_key,
+            timeout=config.n8n_timeout_seconds,
+            nameservers=config.n8n_dns_nameservers,
+        )
+    application.state.n8n_service = n8n_service or N8nService(config.n8n_mode, n8n_client)
     application.include_router(health_router)
     application.include_router(checks_router)
     application.include_router(browser_router)
+    application.include_router(n8n_router)
     return application
 
 

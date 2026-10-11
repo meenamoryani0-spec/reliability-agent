@@ -23,6 +23,10 @@ server_environment = {
     "ENVIRONMENT": "test",
     "LOG_LEVEL": "INFO",
     "WEBSITE_TARGETS": "[]",
+    "N8N_MODE": "fixture" if "--n8n" in sys.argv else "disabled",
+    "N8N_BASE_URL": "",
+    "N8N_API_KEY": "",
+    "N8N_DNS_NAMESERVERS": "[]",
 }
 with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_log:
     server = subprocess.Popen(
@@ -82,6 +86,37 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
             if invalid.status_code != 422:
                 raise RuntimeError("Unsupported check kind was not rejected")
             browser_results = []
+            n8n_results = []
+            if "--n8n" in sys.argv:
+                for path in [
+                    "/n8n/workflows",
+                    "/n8n/executions/failed?workflow_id=wf-booking",
+                    "/n8n/executions/1001",
+                    "/n8n/executions/1002",
+                ]:
+                    response = client.get(path, timeout=15)
+                    response.raise_for_status()
+                    result = response.json()
+                    if result["status"] != "OK" or result["synthetic"] is not True:
+                        raise RuntimeError("n8n fixture inspection did not complete")
+                    n8n_results.append(result)
+                failed = n8n_results[2]["execution"]
+                healthy = n8n_results[3]["execution"]
+                if failed["status"] != "UNHEALTHY" or healthy["status"] != "HEALTHY":
+                    raise RuntimeError("n8n execution states did not match fixture evidence")
+                if not any(
+                    x["node_id"] == "crm" and x["http_status"] == 401 for x in failed["failures"]
+                ):
+                    raise RuntimeError("Missing recorded CRM authentication rejection")
+                if any(x["node_id"] == "confirmation" for x in failed["observed_nodes"]):
+                    raise RuntimeError("Failure fixture unexpectedly recorded confirmation")
+                if not any(x["node_id"] == "confirmation" for x in healthy["observed_nodes"]):
+                    raise RuntimeError("Success fixture is missing confirmation node execution")
+                output_directory = project_root / "work" / "evidence"
+                output_directory.mkdir(parents=True, exist_ok=True)
+                (output_directory / "n8n-smoke.json").write_text(
+                    json.dumps(n8n_results, indent=2), encoding="utf-8"
+                )
             if "--browser" in sys.argv:
                 flows = client.get("/services/browser-flows")
                 flows.raise_for_status()
@@ -113,6 +148,7 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                         "unconfigured_target_status": missing.status_code,
                         "invalid_check_kind_status": invalid.status_code,
                         "browser_flows": browser_results,
+                        "n8n_reads": n8n_results,
                     }
                 )
             )

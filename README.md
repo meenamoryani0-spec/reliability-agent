@@ -13,12 +13,14 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - A bounded Nebius text-inference client and an opt-in live connectivity command.
 - Registered website HTTP/endpoint, latency, DNS, and TLS checks with normalized evidence.
 - Playwright/Chromium synthetic booking flows with UI verification and frontend error counts.
+- Read-only n8n workflow/execution inspection with sanitized node error evidence and local fixtures.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
 is implemented and mock-tested; its real connectivity test still needs an API
 key. Website checks pass local fixtures and a public `example.com` smoke check.
-n8n and database adapters have not been implemented. No provider
+The n8n adapter passes fixture/mock tests; real n8n connectivity remains unverified.
+The database adapter has not been implemented. No provider
 credentials are required to start the backend or run the automated tests.
 
 ## Layout on this computer
@@ -148,7 +150,7 @@ failures and are not diagnoses of a monitored service.
 **Local development does not require a Nebius API key.** Following the user's
 10 October 2026 clarification, development can continue with mocked provider
 responses and local fixtures. Website checks and synthetic Playwright booking
-flows are implemented; the next phase is the read-only n8n integration.
+flows and read-only n8n inspection are implemented; the next phase is infrastructure checks.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -285,6 +287,94 @@ Chromium must be installed before running the full test suite; browser tests fai
 if the browser is missing, rather than silently skipping real execution.
 See `docs/PHASE-4.md` for verified milestone evidence.
 
+## Read-only n8n inspection — Phase 5
+
+Run the local demo without API credentials:
+
+```powershell
+.\scripts\n8n-smoke.ps1
+```
+
+This starts a real FastAPI/Uvicorn backend with `N8N_MODE=fixture`, inspects the
+synthetic workflow and two saved execution records over HTTP, verifies the
+results, and stops the backend. The n8n provider itself is an in-memory fixture;
+no n8n instance, CRM, or customer is contacted. Sanitized results are written to
+`work/evidence/n8n-smoke.json`.
+
+To inspect the same fixtures with the normal backend command, set
+`N8N_MODE=fixture` in the ignored `.env`, then run `scripts/run.ps1`. The default
+is `disabled`; missing live configuration does not prevent backend startup.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/services/n8n
+Invoke-RestMethod http://127.0.0.1:8000/n8n/workflows
+Invoke-RestMethod 'http://127.0.0.1:8000/n8n/executions/failed?workflow_id=wf-booking'
+Invoke-RestMethod http://127.0.0.1:8000/n8n/executions/1001
+Invoke-RestMethod http://127.0.0.1:8000/n8n/executions/1002
+```
+
+Execution `1001` has recorded state `error`, node ID `crm`, and node HTTP 401.
+It returns UNHEALTHY with `authentication_rejected`; the downstream
+`confirmation` node has no recorded run in that fixture. Execution `1002` has
+recorded state `success` with all three nodes observed. This does not prove
+delivery to a customer, and no incident is created or resolved.
+
+Read responses use `status: OK` for a completed inspection and `CHECK_FAILED`
+for an inspection failure. `OK` does not mean the workflow is healthy. Details
+contain their own execution status. `root_cause_verified` and
+`business_outcome_verified` remain false. A recorded HTTP 401 cannot establish
+whether a credential expired, was revoked, or was configured incorrectly.
+HTTP 403 is classified separately as `permission_denied`.
+
+Optional future live configuration, in the ignored `.env` only:
+
+```dotenv
+N8N_MODE=live
+N8N_BASE_URL=https://your-instance.example/api/v1/
+N8N_API_KEY=
+N8N_TIMEOUT_SECONDS=10
+N8N_DNS_NAMESERVERS=[]
+```
+
+Use the actual public HTTPS API root and set its key locally. The client sends
+`X-N8N-API-KEY` and permits only GET for `/workflows`, `/executions?status=error`,
+and `/executions/{id}?includeData=true`. The error list covers the provider's
+`error` status, not canceled or crashed runs. No retry, execution, activation,
+deactivation, credential access, or workflow modification method is implemented.
+Where scoped keys are available, use `workflow:list`, `execution:list`, and
+`execution:read`. n8n's documentation says non-Enterprise keys have full account
+capabilities; this application's GET restriction does not change key permissions.
+[Official authentication/scopes reference](https://docs.n8n.io/connect/n8n-api/authentication.md).
+
+Live destinations must be operator-configured public DNS hostnames, HTTPS on the
+default port, with an API root ending in `/api/v1/`. Subpath installations are
+supported. Local/private self-hosted endpoints require a future explicit network
+policy. Credentials in URLs, query strings, fragments, and literal IPs are
+rejected. All DNS addresses must pass the existing public-address policy; the
+selected address is pinned while preserving Host/TLS SNI. Proxies and redirects
+are disabled. `N8N_DNS_NAMESERVERS` optionally selects up to three public DNS IPs
+inside this app without changing Windows settings.
+
+Each inspection makes one provider request with a total deadline (10 seconds by
+default; configurable 1–30) and a 1 MiB decoded response limit. Lists return one
+page of at most 50 records, with `next_cursor` for explicit subsequent requests;
+there is no automatic pagination. Normalization accepts execution data versions
+0/1 and bounds node counts, attempts, and errors. Unknown/malformed/contradictory
+data is CHECK_FAILED. Missing, redacted, or size-suppressed data is identified;
+the client does not override redaction or request oversized data to be revealed.
+
+Only validated IDs, timestamps, states, opaque cursors, fixed error categories,
+HTTP codes, and hashed node references are retained. Workflow names, node names,
+parameters, credentials, node inputs/outputs, raw messages, stacks, and response
+bodies are not returned or logged. Hashed references are technical identifiers,
+not an anonymity guarantee. The API key is masked in configuration and rejected
+if a provider echoes it in retained result fields.
+
+The local n8n routes are disabled in production until deployment access controls
+are implemented. Synthetic mode is also rejected by production settings.
+`services/n8n` reports configuration only, not connectivity or workflow health.
+See `docs/PHASE-5.md` for verified evidence.
+
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
 No Dockerfile, frontend, database, or empty future adapter files are included.
@@ -296,5 +386,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md`, `docs/PHASE-2.md`, `docs/PHASE-3.md`, and `docs/PHASE-4.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-5.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.
