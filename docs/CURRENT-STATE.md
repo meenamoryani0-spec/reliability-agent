@@ -111,3 +111,10 @@ passes 20 tests, lint/types/standalone build and full npm audit (zero findings).
 Actual standalone Next.js/Uvicorn production-mode local TLS login/logout and backend
 HTTP smoke pass. Ruff lint/format (118 files) and pip check pass. Cloud/container
 acceptance is still pending; read the Phase 14 report for limits.
+
+The subsequent user-requested frontend redesign is documented in FRONTEND-STITCH.md
+and frontend/DESIGN.md. It adds a recorded-signal category map, graphite styling,
+readable evidence, explicit agent mode, and expandable mobile navigation. Online
+Stitch generation and automated visual acceptance were blocked by browser policy;
+the user chose to do the visual review. This is separate from pending Phase 14
+cloud/container acceptance and does not start Phase 15.

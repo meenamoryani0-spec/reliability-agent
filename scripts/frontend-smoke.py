@@ -142,9 +142,11 @@ def main():
                         full_page=True,
                         animations="disabled",
                     )
+                    page.get_by_role("button", name="Open navigation").click()
                     page.get_by_role("button", name="Incidents", exact=True).click()
                     page.get_by_label("Incident status").select_option("RESOLVED")
                     expect(page.locator(".incident-row .status")).to_have_text("Resolved")
+                    page.get_by_role("button", name="Open navigation").click()
                     page.get_by_role("button", name="Connections", exact=True).click()
                     expect(
                         page.get_by_role("heading", name="Workspace capabilities")

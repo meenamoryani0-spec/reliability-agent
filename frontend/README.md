@@ -1,9 +1,14 @@
-# Reliability dashboard — Phase 13
+# Reliability operator workspace
 
 A local Next.js/TypeScript workspace for the existing FastAPI backend. A graphite
 navigation rail, quiet green accents, Geist typography, recorded signal strips,
 and an evidence drawer organize the operational workflow. All chart bars represent
 actual loaded observations; no uptime percentages or invented trend data are shown.
+
+The public introduction is `/`; the operational application is `/dashboard`.
+The final design brief is [DESIGN.md](DESIGN.md). See
+[the redesign report](../docs/FRONTEND-STITCH.md) for provenance, checks, and the
+explicitly unverified visual acceptance.
 
 ## Run against your configured backend
 

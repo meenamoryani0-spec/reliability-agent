@@ -7,9 +7,9 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
-:root { color-scheme: light; }
+:root { color-scheme: dark; background:#14171a; }
 * { box-sizing: border-box; }
-body { @apply m-0 bg-[#f7f9fa] font-sans text-slate-800 antialiased; }
+body { @apply m-0 bg-[#14171a] font-sans text-slate-200 antialiased; }
 button, input, textarea, select { font: inherit; }
 button, summary, a { -webkit-tap-highlight-color: transparent; }
 button { @apply cursor-pointer; }
