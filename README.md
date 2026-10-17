@@ -3,6 +3,49 @@
 Backend, website checks, and Nebius client for a reliability agent that will investigate website,
 n8n/business automation, and infrastructure failures using operational evidence.
 
+## Release status
+
+The application has a locally verified FastAPI backend and Next.js operator
+workspace. Authenticated deployment preparation is implemented; cloud deployment,
+Linux container execution, and live Nebius/provider integrations remain unverified.
+The phase sections below record incremental implementation. For the current
+boundaries, read [CURRENT-STATE.md](docs/CURRENT-STATE.md) and
+[DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Quick start: local synthetic demo on Windows
+
+Prerequisites: Git, Python 3.12 with the Windows `py` launcher, Node.js 24 with npm
+on PATH, PowerShell, and network access for dependency installation. Run the clone
+command from the directory where you want the project; this development workspace
+keeps project files on D:.
+
+```powershell
+git clone https://github.com/meenamoryani0-spec/reliability-agent.git
+Set-Location .\reliability-agent
+$DemoPython = (py -3.12 -c "import sys; print(sys.executable)").Trim()
+.\scripts\setup.ps1 -PythonExe $DemoPython
+.\scripts\frontend-setup.ps1
+.\scripts\browser-install.ps1
+.\scripts\frontend-check.ps1
+.\scripts\frontend-demo.ps1 -Port 3000
+```
+
+Open <http://127.0.0.1:3000/dashboard>. Ctrl+C stops the preview. It uses a fresh
+scratch SQLite database, scripted model responses, and labeled synthetic provider
+fixtures. It makes no live provider or inference requests and needs no cloud
+account, API key, or paid service. This preview does not establish live Nemotron
+integration or complete the hackathon demonstration. The setup commands download
+dependencies; caches, browser binaries, logs, and scratch data stay in ignored
+project `work/` directories.
+
+## License
+
+Original project source is available under the [MIT License](LICENSE).
+Third-party dependencies, including Psycopg (LGPL), Certifi (MPL), and the Geist
+font (SIL Open Font License), retain their own licenses and notices. Dependencies
+are installed separately through the lockfiles; the project license does not
+relicense those packages, model weights, or external services.
+
 ## Current scope
 
 - FastAPI backend with `GET /health` and local API documentation.
@@ -38,7 +81,8 @@ Open <http://127.0.0.1:3000>. For the existing configured backend, run
 Refresh reads history, not fresh provider checks. Source labels, evidence ages,
 unknown causes, and recovery scope stay explicit. All history views are bounded
 to the latest 100 records. Remediation/approval/verification remain local operator
-CLI actions. Production authentication and deployment remain Phase 14.
+CLI actions. Production authentication is implemented in Phase 14; actual cloud
+deployment remains pending.
 See [frontend/README.md](frontend/README.md) for setup, behavior, limits, and checks.
 
 `/health` reports **backend process liveness only**. It does not claim that
@@ -118,8 +162,9 @@ Expected response:
 Local documentation: <http://127.0.0.1:8000/docs>. Stop the foreground server
 with Ctrl+C. Use `-Port 8001` if port 8000 is occupied. The launch script binds
 to loopback and disables access logs to avoid capturing URLs/query strings.
-Docs and OpenAPI routes are disabled with `ENVIRONMENT=production`; production
-deployment and its security configuration remain future work.
+Docs and OpenAPI routes are disabled with `ENVIRONMENT=production`. Authenticated
+production configuration is described in [DEPLOYMENT.md](docs/DEPLOYMENT.md);
+actual cloud deployment remains unverified.
 
 ## Tests and code checks
 
@@ -618,9 +663,8 @@ remain unverified. Each investigation permits at most 6 completion attempts,
 conclusions fail closed while preserving collected evidence. Production access
 stays disabled. See `docs/PHASE-9.md` for configuration, contracts and limitations.
 
-Docker is optional for the overall architecture and is not needed locally.
-Choose the backend host before deciding whether deployment needs a container.
-No Dockerfile, frontend, or empty future adapter files are included.
+Docker is optional for local development. Backend/frontend Dockerfiles and the
+Next.js workspace are now included; Linux image execution remains unverified.
 
 ## Automatic incidents — Phase 10
 
@@ -734,7 +778,7 @@ migration details, outcomes and limits. Live retry remains unverified.
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
 See `docs/PHASE-1.md` through `docs/PHASE-12.md` for validation results and `docs/HANDOFF.md`
-for the original requirements. No public software license has been selected.
+for the original requirements. See [License](#license) for the project license.
 
 ## Phase 12 — verify an accepted retry
 
