@@ -21,6 +21,8 @@ from app.agent.tool_models import (
     ToolResult,
     WebsiteArguments,
 )
+from app.db.assessment import AssessmentCapture
+from app.db.capture import IncidentCapture
 from app.db.snapshots import snapshot_for, source_for
 from app.tools.n8n_models import N8nReadResult
 
@@ -165,7 +167,7 @@ class ToolRegistry:
             "tools": self.definitions(),
             "policy": {
                 "monitored_system_writes": False,
-                "automatic_incidents": False,
+                "automatic_incidents": self._config.incidents_enabled,
                 "max_argument_bytes": MAX_ARGUMENT_BYTES,
                 "max_result_bytes": MAX_RESULT_BYTES,
                 "max_in_flight": 1,
@@ -214,9 +216,35 @@ class ToolRegistry:
             if "result" in completed:
                 # The observation survived; history is still pending/unknown.
                 return completed["result"].model_copy(
-                    update={"history": HistoryCapture(status="unavailable")}
+                    update={"history": self._unavailable_history(completed["result"])}
                 )
             return ToolResult(name=name, status="EXECUTION_FAILED", reason="deadline_exceeded")
+
+    def _unavailable_history(self, result):
+        status = "disabled"
+        if self._config.incidents_enabled:
+            status = "unavailable" if result.data.get("status") == "UNHEALTHY" else "not_applicable"
+        return HistoryCapture(status="unavailable", incident=IncidentCapture(status=status))
+
+    async def save_incident_assessments(self, drafts):
+        """Internal post-validation persistence; never a model-callable tool."""
+        if not self._config.incidents_enabled:
+            return AssessmentCapture(status="disabled")
+        if not drafts:
+            return AssessmentCapture()
+        if self._closed or not self._slot.acquire(blocking=False):
+            return AssessmentCapture(status="unavailable")
+
+        async def save():
+            try:
+                return await self._history.save_assessments(drafts)
+            except Exception:
+                return AssessmentCapture(status="unavailable")
+            finally:
+                self._slot.release()
+
+        self._task = asyncio.create_task(save())
+        return await asyncio.shield(self._task)
 
     async def _run(self, spec, arguments, completed):
         try:
@@ -263,15 +291,16 @@ class ToolRegistry:
             ):
                 raise BoundaryError("unsafe_result")
             # Reserve envelope space for saved-history metadata.
-            if len(encoded.encode()) > MAX_RESULT_BYTES - 256:
+            if len(encoded.encode()) > MAX_RESULT_BYTES - 512:
                 raise BoundaryError("result_too_large")
             completed["result"] = result
             if source is not None:
                 try:
-                    state, identifier = await self._history.capture(observation, source)
-                    history = HistoryCapture(status=state, check_id=identifier)
+                    history = HistoryCapture.model_validate(
+                        await self._history.capture(observation, source)
+                    )
                 except Exception:
-                    history = HistoryCapture(status="unavailable")
+                    history = self._unavailable_history(result)
                 result = result.model_copy(update={"history": history})
             return result
         except BoundaryError as error:

@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from app.db.models import SCHEMA
 
-HEAD = "0001_history"
+HEAD = "0003_incident_assessments"
 
 
 def migration_config(connection):

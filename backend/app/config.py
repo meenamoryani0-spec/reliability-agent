@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     nebius_timeout_seconds: float = Field(default=45, ge=1, le=60)
     nebius_max_tokens: int = Field(default=2048, ge=128, le=4096)
     investigation_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    incidents_enabled: bool = False
     website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
     website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
     n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
@@ -133,6 +134,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_target_ids(self) -> "Settings":
+        if self.environment == "production" and self.incidents_enabled:
+            raise ValueError("Automatic incidents require deployment access controls")
         if len({target.id for target in self.website_targets}) != len(self.website_targets):
             raise ValueError("Website target IDs must be unique")
         if self.environment == "production" and self.n8n_mode == "fixture":

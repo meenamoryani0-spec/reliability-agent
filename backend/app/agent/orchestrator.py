@@ -11,6 +11,7 @@ from app.agent.conclusions import (
     ConclusionError,
     assessment,
     provenance,
+    supports,
     validate_conclusion,
 )
 from app.agent.fixtures import DEMO_QUESTION, fixture_model
@@ -18,6 +19,7 @@ from app.agent.investigation_models import EvidenceRecord, InvestigationReport, 
 from app.agent.prompts import system_prompt
 from app.agent.safety import configured_secrets, contains_secret, load_object
 from app.agent.tool_registry import MAX_RESULT_BYTES
+from app.db.assessment import AssessmentCapture, AssessmentDraft
 
 MAX_MODEL_REQUESTS = 6
 MAX_TOOL_CALLS = 8
@@ -48,6 +50,7 @@ class RunState:
     operation: asyncio.Task | None = None
     report: InvestigationReport | None = None
     stop_reason: str | None = None
+    incident_assessment: AssessmentCapture = field(default_factory=AssessmentCapture)
 
 
 class InvestigationService:
@@ -77,7 +80,7 @@ class InvestigationService:
             "max_tool_calls": MAX_TOOL_CALLS,
             "max_in_flight": 1,
             "deadline_seconds": INVESTIGATION_TIMEOUT_SECONDS,
-            "automatic_incidents": False,
+            "automatic_incidents": self._config.incidents_enabled,
             "remediation": False,
         }
 
@@ -110,6 +113,19 @@ class InvestigationService:
             ),
             cited_evidence_ids=draft.evidence_ids if draft else [],
             next_steps=draft.next_steps if draft else [],
+            incident_assessment=state.incident_assessment
+            if self._config.incidents_enabled
+            else AssessmentCapture(status="disabled"),
+            incident_created=any(
+                record.result.history.incident.status == "created" for record in state.evidence
+            ),
+            incident_ids=list(
+                dict.fromkeys(
+                    record.result.history.incident.incident_id
+                    for record in state.evidence
+                    if record.result.history.incident.incident_id
+                )
+            ),
         )
 
     async def investigate(self, question):
@@ -208,6 +224,23 @@ class InvestigationService:
                         draft = validate_conclusion(message.content, state.evidence)
                     except ConclusionError as error:
                         return self._report(state, "INCOMPLETE", error.code)
+                    if self._config.incidents_enabled:
+                        drafts = [
+                            AssessmentDraft(
+                                check_id=record.result.history.check_id,
+                                hypothesis=draft.hypothesis,
+                                recommended_steps=draft.next_steps,
+                                inference_source=self._source(),
+                            )
+                            for record in state.evidence
+                            if record.id in draft.evidence_ids
+                            and record.result.history.incident.incident_id
+                            and supports(draft.hypothesis, record.result)
+                        ]
+                        state.incident_assessment = AssessmentCapture(status="unavailable")
+                        state.incident_assessment = await self._registry.save_incident_assessments(
+                            drafts
+                        )
                     return self._report(state, "COMPLETED", draft=draft)
                 if state.tool_calls + len(calls) > MAX_TOOL_CALLS:
                     return self._report(state, "INCOMPLETE", "tool_budget_exhausted")

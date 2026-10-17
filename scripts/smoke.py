@@ -22,6 +22,7 @@ server_environment = {
     **os.environ,
     "ENVIRONMENT": "test",
     "LOG_LEVEL": "INFO",
+    "INCIDENTS_ENABLED": "false",
     "INVESTIGATION_MODE": "fixture" if "--agent" in sys.argv else "disabled",
     "WEBSITE_TARGETS": "[]",
     "N8N_MODE": "fixture" if "--n8n" in sys.argv or "--agent" in sys.argv else "disabled",

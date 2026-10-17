@@ -18,6 +18,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Application history storage, explicit Alembic migrations, and service/check/incident repositories.
 - A strict internal registry of 13 bounded monitoring tools, with a local tool catalog.
 - A bounded model/tool investigation loop with validated evidence-linked conclusions.
+- Opt-in automatic incidents from persisted unhealthy checks, with deduplication and evidence links.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -159,7 +160,7 @@ failures and are not diagnoses of a monitored service.
 responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
 database persistence, the AI tool registry and the investigation loop are also
-implemented; automatic incident creation is next.
+implemented, including opt-in automatic incident creation. Approved remediation is next.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -326,7 +327,8 @@ Execution `1001` has recorded state `error`, node ID `crm`, and node HTTP 401.
 It returns UNHEALTHY with `authentication_rejected`; the downstream
 `confirmation` node has no recorded run in that fixture. Execution `1002` has
 recorded state `success` with all three nodes observed. This does not prove
-delivery to a customer, and no incident is created or resolved.
+delivery to a customer. With INCIDENTS_ENABLED=true, unhealthy synthetic checks
+can create synthetic incidents; no incident is resolved automatically.
 
 Read responses use `status: OK` for a completed inspection and `CHECK_FAILED`
 for an inspection failure. `OK` does not mean the workflow is healthy. Details
@@ -456,7 +458,8 @@ tables, models, migrations or arbitrary queries were added. See `docs/PHASE-6.md
 
 Application storage is separate from the monitored `POSTGRES_*` database.
 It stores monitored service identities, check results, and the initial incident
-records. No autonomous incident creation or resolution workflow is added yet.
+records. Phase 10 adds opt-in automatic detection, described below; resolution
+remains blocked until verified recovery exists.
 
 On this computer local history is enabled in the ignored `.env`, with the
 database at `work/data/reliability.sqlite3` on D:. On a fresh checkout, configure:
@@ -475,7 +478,9 @@ Then run the explicit migration and backend:
 
 `migrate.ps1 -Action status` checks revision without upgrading. Startup and HTTP
 routes never apply migrations. Migration `0001_history` creates only application
-tables: `monitored_services`, `checks`, and `incidents`. PostgreSQL uses the
+tables: `monitored_services`, `checks`, and `incidents`. Current head
+`0002_incident_detection` adds evidence links/deduplication; head
+`0003_incident_assessments` stores supported diagnoses and recommendations. PostgreSQL uses the
 separate `reliability` schema; SQLite uses the configured local file. Existing
 customer/provider tables are never used for application history.
 
@@ -567,7 +572,8 @@ Phase 9 successfully reran the PostgreSQL harness in the current environment.
 accepts `{"question":"..."}` and runs the bounded model/tool/evidence cycle.
 Model-selected hypotheses must cite actual observations and pass support checks.
 Summaries remain scoped to observed failures; root cause and business outcome
-stay unverified. The loop creates no incident and performs no remediation.
+stay unverified. With Phase 10 enabled, persisted unhealthy tool observations
+create incidents through server policy. The loop performs no remediation.
 
 `INVESTIGATION_MODE` defaults to `disabled`. Run the local fixture smoke:
 
@@ -592,6 +598,66 @@ Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
 No Dockerfile, frontend, or empty future adapter files are included.
 
+## Automatic incidents — Phase 10
+
+`INCIDENTS_ENABLED` defaults to `false`. With migrated application storage and
+this flag set to `true`, each persisted `UNHEALTHY` observation automatically
+opens or reuses an incident. The policy applies to direct monitoring requests
+and investigation tools, independently of model conclusions. No incident-write
+tool is exposed to the model. Production enablement is rejected pending controls.
+
+Deduplication uses service identity plus check kind. Source changes and
+synthetic/live data keep distinct identities. Repeated failures link additional
+check observations to the same unresolved incident. `observation_count` counts
+checks, including repeated polling of the same execution; it is not a count of
+affected bookings, users or unique provider events. Different causes within one
+service/check kind currently share an unresolved incident.
+
+`HEALTHY`, `DEGRADED`, `UNKNOWN`, `CHECK_FAILED` and list metadata create no
+incidents. A healthy observation does not resolve an existing incident. Root
+cause and business outcome remain unverified; new incidents use policy severity
+`high`, which is not independently measured customer impact.
+
+Direct check responses add `X-Incident-Status` (disabled, not_applicable, created,
+existing or unavailable) and, only when confirmed, `X-Incident-Id`. A failed
+incident transaction preserves the separately committed check. Investigation
+reports contain confirmed `incident_ids`; `incident_created` means at least one
+incident was confirmed newly created during that run. A deadline may return
+unavailable while the worker later commits; read history after it finishes.
+
+```powershell
+.\scripts\incidents-smoke.ps1
+```
+
+This uses fresh SQLite storage, actual Uvicorn/Chromium and scripted monitoring/
+model fixtures, then restarts the server and verifies the same incidents/evidence.
+For interactive local use, explicitly migrate before setting the opt-in flag:
+
+```powershell
+.\scripts\migrate.ps1 -Action upgrade
+$env:INCIDENTS_ENABLED = 'true'
+$env:INVESTIGATION_MODE = 'fixture'
+$env:N8N_MODE = 'fixture'
+$env:INFRASTRUCTURE_MODE = 'fixture'
+.\scripts\run.ps1
+```
+
+Bounded reads include `GET /history/incidents/{id}` and
+`GET /history/incidents/{id}/observations?limit=25&offset=0` and
+`GET /history/incidents/{id}/assessments`; incident lists also
+support `synthetic=true|false`. No incident create/update/resolve HTTP route,
+background polling scheduler, replay/reconciliation, remediation or recovery
+workflow is added. Existing development `.env` settings remain unchanged.
+A validated investigation conclusion stores an assessment only for cited,
+supporting checks linked to an incident. Assessments contain the finite hypothesis,
+recommended next steps, actual inference source, timestamp and supporting check
+ID. Root cause is explicitly unknown (`null`) and unverified; HTTP 401 alone
+cannot establish credential expiry. Invalid conclusions add no diagnosis.
+`incident_assessment` reports its separate save outcome. Stored assessments can
+survive even if a caller deadline expires before confirmation. Replay preserves
+an existing assessment for the same check. No numeric confidence is invented.
+See `docs/PHASE-10.md` for migration safeguards, evidence and limitations.
+
 ## Documentation checked for Phase 1
 
 - [FastAPI first steps](https://fastapi.tiangolo.com/tutorial/first-steps/)
@@ -599,5 +665,5 @@ No Dockerfile, frontend, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-9.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-10.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

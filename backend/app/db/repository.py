@@ -3,13 +3,21 @@
 from contextlib import contextmanager
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Incident, MonitoredService, StoredCheck, now
+from app.db.models import (
+    ACTIVE_INCIDENT,
+    Incident,
+    IncidentAssessment,
+    IncidentObservation,
+    MonitoredService,
+    StoredCheck,
+    now,
+)
 from app.db.snapshots import Snapshot
 
 
@@ -61,16 +69,24 @@ def check_dict(row, service):
     }
 
 
-def incident_dict(row, service):
+def incident_dict(row, service, count=0, first=None, last=None):
     return {
         "id": row.id,
         "service_id": row.service_id,
         "detected_check_id": row.detected_check_id,
+        "category": service.category,
+        "component": service.component,
+        "kind": row.kind,
+        "title": f"Unhealthy {service.category} {row.kind} observation",
         "status": row.status,
         "severity": row.severity,
         "created_at": row.created_at,
         "synthetic": service.synthetic,
+        "observation_count": count or 0,
+        "first_observed_at": first,
+        "last_observed_at": last,
         "root_cause_verified": False,
+        "root_cause": None,
         "verified": False,
     }
 
@@ -81,9 +97,11 @@ class HistoryRepository:
         self.sessions = sessionmaker(engine, expire_on_commit=False)
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, write=False):
         try:
             with self.sessions.begin() as session:
+                if write and self.engine.dialect.name == "sqlite":
+                    session.connection(execution_options={"sqlite_write": True})
                 yield session
         except SQLAlchemyError:
             raise StorageError("storage_unavailable") from None
@@ -153,36 +171,190 @@ class HistoryRepository:
             ).first()
             return check_dict(*pair) if pair else None
 
-    def incidents(self, *, limit=25, offset=0, service_id=None):
+    @staticmethod
+    def _incident_query():
+        stats = (
+            select(
+                IncidentObservation.incident_id,
+                func.count().label("observation_count"),
+                func.min(StoredCheck.observed_at).label("first_observed_at"),
+                func.max(StoredCheck.observed_at).label("last_observed_at"),
+            )
+            .join(StoredCheck, StoredCheck.id == IncidentObservation.check_id)
+            .group_by(IncidentObservation.incident_id)
+            .subquery()
+        )
+        return (
+            select(
+                Incident,
+                MonitoredService,
+                stats.c.observation_count,
+                stats.c.first_observed_at,
+                stats.c.last_observed_at,
+            )
+            .join(MonitoredService, Incident.service_id == MonitoredService.id)
+            .outerjoin(stats, stats.c.incident_id == Incident.id)
+        )
+
+    def incidents(self, *, limit=25, offset=0, service_id=None, synthetic=None):
         page_bounds(limit, offset)
         with self.transaction() as session:
-            query = select(Incident, MonitoredService).join(
-                MonitoredService, Incident.service_id == MonitoredService.id
-            )
+            query = self._incident_query()
             if service_id is not None:
                 query = query.where(Incident.service_id == valid_id(service_id))
+            if synthetic is not None:
+                query = query.where(MonitoredService.synthetic == synthetic)
             query = query.order_by(Incident.created_at.desc(), Incident.id.desc())
             return [
-                incident_dict(row, service)
-                for row, service in session.execute(query.limit(limit).offset(offset))
+                incident_dict(*row) for row in session.execute(query.limit(limit).offset(offset))
             ]
 
-    def create_open_incident(self, detected_check_id, *, severity="high"):
-        """Storage foundation only; no HTTP or autonomous incident-creation workflow yet."""
-        if severity not in {"warning", "high"}:
-            raise StorageError("invalid_severity")
+    def incident(self, incident_id):
         with self.transaction() as session:
+            row = session.execute(
+                self._incident_query().where(Incident.id == valid_id(incident_id))
+            ).first()
+            return incident_dict(*row) if row else None
+
+    def incident_observations(self, incident_id, *, limit=25, offset=0):
+        page_bounds(limit, offset)
+        identifier = valid_id(incident_id)
+        with self.transaction() as session:
+            query = (
+                select(StoredCheck, MonitoredService)
+                .join(IncidentObservation, IncidentObservation.check_id == StoredCheck.id)
+                .join(MonitoredService, MonitoredService.id == StoredCheck.service_id)
+                .where(IncidentObservation.incident_id == identifier)
+                .order_by(
+                    StoredCheck.observed_at.desc(),
+                    StoredCheck.created_at.desc(),
+                    StoredCheck.id.desc(),
+                )
+            )
+            return [check_dict(*row) for row in session.execute(query.limit(limit).offset(offset))]
+
+    def create_open_incident(self, detected_check_id, *, severity="high"):
+        return self.ensure_incident(detected_check_id, severity=severity)[0]
+
+    def save_assessments(self, drafts):
+        from app.agent.conclusions import supports
+        from app.agent.tool_models import ToolResult
+        from app.db.assessment import AssessmentDraft
+
+        if not isinstance(drafts, list) or not 1 <= len(drafts) <= 8:
+            raise StorageError("invalid_assessments")
+        values = [AssessmentDraft.model_validate(value.model_dump()) for value in drafts]
+        with self.transaction(write=True) as session:
+            insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+            identifiers = []
+            for value in values:
+                linked = session.get(IncidentObservation, value.check_id)
+                if linked is None:
+                    raise StorageError("assessment_requires_incident_evidence")
+                check = session.get(StoredCheck, value.check_id)
+                service = session.get(MonitoredService, check.service_id)
+                evidence = ToolResult(
+                    name=None,
+                    status="OK",
+                    data={
+                        "status": check.status,
+                        "service": service.category,
+                        "component": service.component,
+                        "evidence": check.payload.get("evidence", {}),
+                    },
+                )
+                if not supports(value.hypothesis, evidence):
+                    raise StorageError("unsupported_assessment")
+                if value.inference_source == "scripted_fixture" and not service.synthetic:
+                    raise StorageError("assessment_provenance_mismatch")
+                session.execute(
+                    insert(IncidentAssessment)
+                    .values(
+                        check_id=value.check_id,
+                        hypothesis=value.hypothesis,
+                        recommended_steps=value.recommended_steps,
+                        inference_source=value.inference_source,
+                        root_cause=None,
+                    )
+                    .on_conflict_do_nothing(index_elements=["check_id"])
+                )
+                identifiers.append(value.check_id)
+            return list(dict.fromkeys(identifiers))
+
+    def incident_assessments(self, incident_id, *, limit=25, offset=0):
+        page_bounds(limit, offset)
+        with self.transaction() as session:
+            query = (
+                select(IncidentAssessment)
+                .join(
+                    IncidentObservation, IncidentObservation.check_id == IncidentAssessment.check_id
+                )
+                .where(IncidentObservation.incident_id == valid_id(incident_id))
+                .order_by(IncidentAssessment.created_at.desc(), IncidentAssessment.check_id.desc())
+            )
+            return [
+                {
+                    "check_id": row.check_id,
+                    "hypothesis": row.hypothesis,
+                    "recommended_steps": row.recommended_steps,
+                    "inference_source": row.inference_source,
+                    "root_cause": row.root_cause,
+                    "root_cause_verified": False,
+                    "created_at": row.created_at,
+                }
+                for row in session.scalars(query.limit(limit).offset(offset))
+            ]
+
+    def ensure_incident(self, detected_check_id, *, severity="high"):
+        """Atomically reuse one unresolved incident per service/kind and link each check once."""
+        if not isinstance(severity, str) or severity not in {"warning", "high"}:
+            raise StorageError("invalid_severity")
+        with self.transaction(write=True) as session:
             check = session.get(StoredCheck, valid_id(detected_check_id))
             if check is None or check.status != "UNHEALTHY":
                 raise StorageError("incident_requires_unhealthy_evidence")
-            existing = session.scalar(
-                select(Incident).where(Incident.detected_check_id == check.id)
-            )
-            if existing is None:
-                existing = Incident(
-                    service_id=check.service_id, detected_check_id=check.id, severity=severity
+            linked = session.get(IncidentObservation, check.id)
+            created = False
+            if linked is not None:
+                identifier = linked.incident_id
+            else:
+                insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+                identifier = session.execute(
+                    insert(Incident)
+                    .values(
+                        service_id=check.service_id,
+                        detected_check_id=check.id,
+                        kind=check.kind,
+                        evidence_status="UNHEALTHY",
+                        status="OPEN",
+                        severity=severity,
+                    )
+                    # Same-check races can conflict with detected_check_id before
+                    # the active-key index. Handle either uniqueness constraint.
+                    .on_conflict_do_nothing()
+                    .returning(Incident.id)
+                ).scalar_one_or_none()
+                created = identifier is not None
+                if identifier is None:
+                    identifier = session.scalar(
+                        select(Incident.id).where(
+                            Incident.service_id == check.service_id,
+                            Incident.kind == check.kind,
+                            ACTIVE_INCIDENT,
+                        )
+                    )
+                if identifier is None:
+                    raise StorageError("incident_detection_unavailable")
+                session.execute(
+                    insert(IncidentObservation)
+                    .values(
+                        check_id=check.id,
+                        incident_id=identifier,
+                        service_id=check.service_id,
+                        kind=check.kind,
+                        check_status="UNHEALTHY",
+                    )
+                    .on_conflict_do_nothing(index_elements=["check_id"])
                 )
-                session.add(existing)
-                session.flush()
-            service = session.get(MonitoredService, check.service_id)
-            return incident_dict(existing, service)
+            row = session.execute(self._incident_query().where(Incident.id == identifier)).one()
+            return incident_dict(*row), created

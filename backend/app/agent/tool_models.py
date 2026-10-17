@@ -2,8 +2,9 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.db.capture import HistoryCapture
 from app.tools.browser_models import FlowId
 from app.tools.n8n_models import Cursor, ExecutionId, ResourceId
 
@@ -31,19 +32,6 @@ class FailedExecutionsArguments(PageArguments):
 
 class ExecutionArguments(Arguments):
     execution_id: ExecutionId
-
-
-class HistoryCapture(Arguments):
-    status: Literal["not_applicable", "saved", "disabled", "unavailable"] = "not_applicable"
-    check_id: (
-        Annotated[str, Field(pattern=r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")] | None
-    ) = None
-
-    @model_validator(mode="after")
-    def saved_identifier(self):
-        if (self.status == "saved") != (self.check_id is not None):
-            raise ValueError("Saved history requires a check identifier")
-        return self
 
 
 class ToolResult(Arguments):

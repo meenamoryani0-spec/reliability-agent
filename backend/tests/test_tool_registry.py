@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from app.agent.tool_registry import MAX_ARGUMENT_BYTES, MAX_RESULT_BYTES
 from app.config import PROJECT_ROOT, Settings
+from app.db.capture import HistoryCapture
 from app.db.database import create_storage_engine
 from app.db.migrate import upgrade
 from app.main import create_app
@@ -470,7 +471,7 @@ def test_slow_storage_returns_observation_while_slot_stays_busy():
 
         async def capture(*_):
             await release.wait()
-            return "disabled", None
+            return HistoryCapture(status="disabled")
 
         registry = configured_app().state.tool_registry
         registry._history = Mock(capture=capture)
@@ -492,3 +493,49 @@ def test_production_rejects_catalog_and_internal_execution():
         assert app.state.tool_registry.definitions() == []
         result = client.portal.call(app.state.tool_registry.execute, "list_website_targets", "{}")
         assert result.reason == "access_disabled"
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+@pytest.mark.parametrize(
+    "enabled,tool,arguments,expected",
+    [
+        (True, "get_n8n_execution", '{"execution_id":"1001"}', "unavailable"),
+        (True, "check_postgres", "{}", "not_applicable"),
+        (False, "get_n8n_execution", '{"execution_id":"1001"}', "disabled"),
+    ],
+)
+def test_uncertain_storage_does_not_claim_incident_detection_is_inapplicable(
+    timed_out, enabled, tool, arguments, expected
+):
+    async def run():
+        release = asyncio.Event()
+
+        async def capture(*_):
+            if timed_out:
+                await release.wait()
+            raise RuntimeError("PRIVATE_STORAGE_DETAILS")
+
+        registry = configured_app(
+            settings=Settings(
+                _env_file=None,
+                environment="test",
+                incidents_enabled=enabled,
+                n8n_mode="fixture",
+                infrastructure_mode="fixture",
+            )
+        ).state.tool_registry
+        registry._history = Mock(capture=capture)
+        short_deadline(registry, tool)
+        try:
+            result = await registry.execute(tool, arguments)
+            assert result.status == "OK" and result.history.status == "unavailable"
+            assert result.history.incident.status == expected
+            assert result.history.incident.incident_id is None
+            assert "PRIVATE_STORAGE_DETAILS" not in result.model_dump_json()
+            if timed_out:
+                assert (await registry.execute(tool, arguments)).reason == "busy"
+        finally:
+            release.set()
+            await registry.close()
+
+    asyncio.run(run())

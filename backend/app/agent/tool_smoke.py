@@ -23,6 +23,7 @@ async def main():
     config = Settings(
         _env_file=None,
         environment="test",
+        incidents_enabled=False,
         website_targets=[],
         n8n_mode="fixture",
         infrastructure_mode="fixture",

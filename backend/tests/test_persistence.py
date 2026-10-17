@@ -1,5 +1,3 @@
-import os
-import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 from uuid import uuid4
@@ -7,12 +5,16 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from sqlalchemy import inspect, update
-from sqlalchemy.engine import make_url
 
-from app.config import PROJECT_ROOT, Settings
 from app.db.database import create_storage_engine
 from app.db.migrate import HEAD, current_revision, migration_config, upgrade
-from app.db.models import Incident, MonitoredService, StoredCheck
+from app.db.models import (
+    Incident,
+    IncidentAssessment,
+    IncidentObservation,
+    MonitoredService,
+    StoredCheck,
+)
 from app.db.repository import HistoryRepository, StorageError
 from app.db.snapshots import Snapshot, snapshot_for
 from app.tools.infrastructure_models import InfrastructureResult
@@ -31,57 +33,24 @@ def observation(*, status="UNHEALTHY", synthetic=True, source="fixture", at=None
     return snapshot_for(result, source)
 
 
-@pytest.fixture(params=("local", "postgresql"))
-def database_config(request, tmp_path):
-    if request.param == "local":
-        return Settings(
-            _env_file=None,
-            storage_mode="local",
-            storage_sqlite_file=str((tmp_path / "history.sqlite3").relative_to(PROJECT_ROOT)),
-        )
-    raw = os.environ.get("RA_TEST_POSTGRES_URL")
-    if not raw:
-        pytest.skip("Run scripts/postgres-integration.ps1 for isolated PostgreSQL tests")
-    url = make_url(raw)
-    # Destructive migration tests are confined to the harness-created scratch DB.
-    if url.host != "127.0.0.1" or not re.fullmatch(r"ra_phase7_[0-9a-f]{16}", url.database or ""):
-        pytest.fail("Refusing a non-isolated PostgreSQL test database")
-    return Settings(
-        _env_file=None,
-        storage_mode="postgresql",
-        storage_database_url=raw,
-        storage_allow_loopback=True,
-    )
-
-
-@pytest.fixture
-def engine(database_config):
-    value = create_storage_engine(database_config)
-    upgrade(value)
-    yield value
-    with value.begin() as connection:
-        command.downgrade(migration_config(connection), "base")
-    value.dispose()
-
-
-@pytest.fixture
-def repository(engine):
-    return HistoryRepository(engine)
-
-
 def test_migration_is_idempotent_and_supports_rollback_then_upgrade(engine):
     assert current_revision(engine) == HEAD
     upgrade(engine)
     schema = "reliability" if engine.dialect.name == "postgresql" else None
     inspector = inspect(engine)
-    assert {"monitored_services", "checks", "incidents", "ra_schema_version"} <= set(
-        inspector.get_table_names(schema=schema)
-    )
+    assert {
+        "monitored_services",
+        "checks",
+        "incidents",
+        "incident_observations",
+        "incident_assessments",
+        "ra_schema_version",
+    } <= set(inspector.get_table_names(schema=schema))
     assert {row["name"] for row in inspector.get_indexes("checks", schema=schema)} >= {
         "ix_checks_created",
         "ix_checks_service_observed",
     }
-    assert len(inspector.get_foreign_keys("incidents", schema=schema)) == 1
+    assert len(inspector.get_foreign_keys("incidents", schema=schema)) == 2
     with engine.begin() as connection:
         command.downgrade(migration_config(connection), "base")
     assert current_revision(engine) is None
@@ -92,7 +61,7 @@ def test_migration_is_idempotent_and_supports_rollback_then_upgrade(engine):
 def test_schema_and_orm_columns_match(engine):
     schema = "reliability" if engine.dialect.name == "postgresql" else None
     inspector = inspect(engine)
-    for model in (MonitoredService, StoredCheck, Incident):
+    for model in (MonitoredService, StoredCheck, Incident, IncidentObservation, IncidentAssessment):
         assert {
             column["name"] for column in inspector.get_columns(model.__tablename__, schema=schema)
         } == set(model.__table__.columns.keys())
@@ -221,6 +190,7 @@ def test_incident_cannot_cross_service_boundary(repository):
                 Incident(
                     service_id=second_service,
                     detected_check_id=first,
+                    kind="deployment",
                     status="OPEN",
                     severity="high",
                 )

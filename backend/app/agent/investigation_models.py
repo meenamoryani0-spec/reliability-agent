@@ -5,26 +5,9 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator
 
 from app.agent.tool_models import Arguments, ToolResult
+from app.db.assessment import AssessmentCapture, Hypothesis, NextStep
+from app.db.capture import RecordId
 
-Hypothesis = Literal[
-    "authentication_rejection",
-    "permission_rejection",
-    "rate_limiting",
-    "upstream_error",
-    "workflow_failure",
-    "website_failure",
-    "deployment_failure",
-    "infrastructure_failure",
-    "unknown",
-]
-NextStep = Literal[
-    "inspect_authentication_configuration",
-    "inspect_execution",
-    "verify_business_flow",
-    "inspect_website",
-    "inspect_infrastructure",
-    "collect_more_evidence",
-]
 EvidenceId = Annotated[str, Field(pattern=r"^e[1-8]$")]
 
 
@@ -102,5 +85,7 @@ class InvestigationReport(Arguments):
     )
     root_cause_verified: Literal[False] = False
     business_outcome_verified: Literal[False] = False
-    incident_created: Literal[False] = False
+    incident_assessment: AssessmentCapture = Field(default_factory=AssessmentCapture)
+    incident_created: bool = False
+    incident_ids: list[RecordId] = Field(default_factory=list, max_length=8)
     remediation_executed: Literal[False] = False
