@@ -27,6 +27,19 @@ server_environment = {
     "N8N_BASE_URL": "",
     "N8N_API_KEY": "",
     "N8N_DNS_NAMESERVERS": "[]",
+    "INFRASTRUCTURE_MODE": "fixture" if "--infrastructure" in sys.argv else "disabled",
+    "INFRASTRUCTURE_DNS_NAMESERVERS": "[]",
+    "INFRASTRUCTURE_TIMEOUT_SECONDS": "10",
+    "VERCEL_TOKEN": "",
+    "VERCEL_DEPLOYMENT_ID": "",
+    "VERCEL_TEAM_ID": "",
+    "SUPABASE_ACCESS_TOKEN": "",
+    "SUPABASE_PROJECT_REF": "",
+    "POSTGRES_HOST": "",
+    "POSTGRES_PORT": "5432",
+    "POSTGRES_DBNAME": "",
+    "POSTGRES_USER": "",
+    "POSTGRES_PASSWORD": "",
 }
 with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_log:
     server = subprocess.Popen(
@@ -87,6 +100,40 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                 raise RuntimeError("Unsupported check kind was not rejected")
             browser_results = []
             n8n_results = []
+            infrastructure_results = []
+            if "--infrastructure" in sys.argv:
+                registry = client.get("/services/infrastructure")
+                registry.raise_for_status()
+                if registry.json()["mode"] != "fixture" or len(registry.json()["checks"]) != 5:
+                    raise RuntimeError("Infrastructure fixture registry is not available")
+                for check_id, expected_status in [
+                    ("vercel-deployment", "UNHEALTHY"),
+                    ("vercel-events", "UNKNOWN"),
+                    ("supabase-project", "HEALTHY"),
+                    ("supabase-health", "HEALTHY"),
+                    ("postgres", "HEALTHY"),
+                ]:
+                    response = client.post(f"/checks/infrastructure/{check_id}", timeout=15)
+                    response.raise_for_status()
+                    result = response.json()
+                    if (
+                        result["status"] != expected_status
+                        or result["inspection"] != "OK"
+                        or result["synthetic"] is not True
+                        or result["root_cause_verified"]
+                        or result["business_outcome_verified"]
+                    ):
+                        raise RuntimeError("Infrastructure fixture returned unexpected evidence")
+                    infrastructure_results.append(result)
+                if client.post("/checks/infrastructure/arbitrary").status_code != 404:
+                    raise RuntimeError("Unregistered infrastructure check was not rejected")
+                if "SYNTHETIC_PRIVATE_DATA_DO_NOT_RETURN" in json.dumps(infrastructure_results):
+                    raise RuntimeError("Private fixture data was retained")
+                output_directory = project_root / "work" / "evidence"
+                output_directory.mkdir(parents=True, exist_ok=True)
+                (output_directory / "infrastructure-smoke.json").write_text(
+                    json.dumps(infrastructure_results, indent=2), encoding="utf-8"
+                )
             if "--n8n" in sys.argv:
                 for path in [
                     "/n8n/workflows",
@@ -149,6 +196,7 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                         "invalid_check_kind_status": invalid.status_code,
                         "browser_flows": browser_results,
                         "n8n_reads": n8n_results,
+                        "infrastructure_checks": infrastructure_results,
                     }
                 )
             )

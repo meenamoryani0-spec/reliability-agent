@@ -14,14 +14,17 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Registered website HTTP/endpoint, latency, DNS, and TLS checks with normalized evidence.
 - Playwright/Chromium synthetic booking flows with UI verification and frontend error counts.
 - Read-only n8n workflow/execution inspection with sanitized node error evidence and local fixtures.
+- Read-only Vercel deployment/events, Supabase project/service-health, and PostgreSQL probes.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
 is implemented and mock-tested; its real connectivity test still needs an API
 key. Website checks pass local fixtures and a public `example.com` smoke check.
 The n8n adapter passes fixture/mock tests; real n8n connectivity remains unverified.
-The database adapter has not been implemented. No provider
-credentials are required to start the backend or run the automated tests.
+Infrastructure adapters pass mocks/fixtures; live Vercel, Supabase and PostgreSQL
+connections remain unverified. PostgreSQL has a fixed connectivity probe;
+persistent application models/migrations are Phase 7. No provider credentials
+are required to start the backend or run the automated tests.
 
 ## Layout on this computer
 
@@ -150,7 +153,8 @@ failures and are not diagnoses of a monitored service.
 **Local development does not require a Nebius API key.** Following the user's
 10 October 2026 clarification, development can continue with mocked provider
 responses and local fixtures. Website checks and synthetic Playwright booking
-flows and read-only n8n inspection are implemented; the next phase is infrastructure checks.
+flows, read-only n8n inspection and infrastructure checks are implemented;
+the next phase is database persistence.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -375,6 +379,74 @@ are implemented. Synthetic mode is also rejected by production settings.
 `services/n8n` reports configuration only, not connectivity or workflow health.
 See `docs/PHASE-5.md` for verified evidence.
 
+## Infrastructure checks — Phase 6
+
+Run `scripts/infrastructure-smoke.ps1` without credentials. It starts a real
+Uvicorn/FastAPI server, checks five endpoints over HTTP, saves sanitized results
+to `work/evidence/infrastructure-smoke.json`, and stops the server. The provider
+responses use HTTPX mocks; PostgreSQL uses a fake driver, not a SQL server.
+
+For interactive exploration, set `INFRASTRUCTURE_MODE=fixture` in the ignored
+repository-root `.env`, run `scripts/run.ps1`, and open local `/docs`.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/services/infrastructure
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/infrastructure/vercel-deployment
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/infrastructure/vercel-events
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/infrastructure/supabase-project
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/infrastructure/supabase-health
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/checks/infrastructure/postgres
+```
+
+| Check | Evidence and limits |
+| --- | --- |
+| `vercel-deployment` | Configured deployment ID and readyState; READY does not verify production alias or business health |
+| `vercel-events` | Up to 25 build event types/timestamps; no raw log text; always UNKNOWN health |
+| `supabase-project` | Configured project reference and provider-reported project state |
+| `supabase-health` | Complete, consistent provider reports for db, auth and rest only |
+| `postgres` | Fixed SELECT 1 plus transaction_read_only; require `(1, 'on')` |
+
+Modes are `disabled` (default), `fixture` and opt-in `live`. Missing live settings
+do not prevent startup. The registry reports configuration only. Results
+separate `inspection` from `status`, and always leave root cause and business
+outcome unverified. Authentication, rate-limit, DNS, transport, invalid-response
+and database access errors are CHECK_FAILED with `healthy: null`.
+
+Vercel ERROR/BLOCKED are unhealthy deployment states; canceled/in-progress states
+are UNKNOWN. Supabase ACTIVE_UNHEALTHY and explicit initialization/restore/pause
+failures are UNHEALTHY; inactive/transitional project states are UNKNOWN. Service
+COMING_UP is DEGRADED. Missing/duplicate/contradictory health reports fail checks.
+
+Optional live settings are in `.env.example`. Set `INFRASTRUCTURE_MODE=live`:
+
+- Vercel: `VERCEL_TOKEN`, `VERCEL_DEPLOYMENT_ID` (`dpl_...`), optional `VERCEL_TEAM_ID`.
+- Supabase: `SUPABASE_ACCESS_TOKEN` (Management API token), `SUPABASE_PROJECT_REF` (20 lowercase letters). Project anon/service-role keys are not Management API tokens.
+- PostgreSQL: `POSTGRES_HOST`, `POSTGRES_PORT` (5432/6543), `POSTGRES_DBNAME`, `POSTGRES_USER`, `POSTGRES_PASSWORD`. Use a dedicated least-privilege login.
+
+Keep secrets in ignored environment configuration. There are no arbitrary URL,
+DSN or SQL inputs. Inspection routes and fixtures are disabled in production
+until deployment access controls exist. The read-only probe does not revoke a
+database login's privileges elsewhere.
+
+HTTP clients use fixed official hosts, HTTPS, public DNS validation, IP pinning
+and original Host/TLS SNI. Proxies, redirects, retries and automatic pagination
+are disabled. Total timeout defaults to 10 seconds (configurable 1–30); decoded
+response limit is 1 MiB. Events are a sample, not complete logs.
+
+PostgreSQL accepts one public DNS hostname. Psycopg/libpq pins a validated IP
+using `hostaddr`, preserving `host` for TLS identity. Live probes use a separate
+process; the password travels via stdin, not command-line arguments. Unrelated
+credentials, proxy and PG environment settings are excluded. TLS is verify-full
+using the pinned Certifi CA bundle; client certificates and GSS/SSPI are disabled.
+Only password/SCRAM authentication is allowed. Private/self-signed databases
+need a future explicit network/CA policy.
+
+The worker executes one static read-only query with server-side statement/lock
+timeouts. The caller deadline includes DNS/startup; worker communication uses
+the remaining budget, with up to ten seconds for process termination cleanup.
+Overlapping probes fail while that worker slot is occupied. No application
+tables, models, migrations or arbitrary queries were added. See `docs/PHASE-6.md`.
+
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
 No Dockerfile, frontend, database, or empty future adapter files are included.
@@ -386,5 +458,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-5.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-6.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

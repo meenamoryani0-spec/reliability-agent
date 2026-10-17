@@ -5,7 +5,7 @@ Read README.md and docs/HANDOFF.md before extending the application.
 - Keep all new project files, virtual environments, caches, and logs on D:.
 - Build incrementally and run each component and its local tests before extending it.
 - User clarification on 2026-10-10: API credentials must not block local development. Use mocks/local fixtures; defer real provider tests until credentials are supplied.
-- Phases 1, 3, 4, and 5 are verified locally; website DNS/HTTP/TLS also passed an example.com public smoke check. Phase 4 uses real Chromium with intercepted synthetic booking fixtures. Phase 5 is read-only n8n inspection, verified with provider fixtures/mocks and live backend HTTP; real n8n connectivity is unverified. The Phase 2 client passes mocked tests; real Nebius connectivity remains unverified. The next build phase is infrastructure checks. See docs/PHASE-5.md and docs/CURRENT-STATE.md.
+- Phases 1, 3, 4, 5, and 6 are verified locally. Phase 6 adds read-only Vercel/Supabase checks and a process-isolated PostgreSQL probe; tests/backend HTTP use provider/driver fixtures. Live Vercel, Supabase, PostgreSQL, n8n and Nebius connections remain unverified. Website checks previously passed an example.com smoke; Chromium flows are synthetic fixtures. Next is Phase 7 — database persistence. See docs/PHASE-6.md and docs/CURRENT-STATE.md.
 - Do not claim real integrations or the complete application work until live provider and end-to-end validation pass.
 - Follow the handoff's Python/FastAPI backend-first order; no empty future modules.
 - Check current official provider documentation before implementing API adapters.

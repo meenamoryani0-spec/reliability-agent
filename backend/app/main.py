@@ -7,10 +7,12 @@ from fastapi import FastAPI
 from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
+from app.api.infrastructure import router as infrastructure_router
 from app.api.n8n import router as n8n_router
 from app.config import Settings
 from app.logging import configure_logging
 from app.tools.browser import BrowserChecker
+from app.tools.infrastructure import InfrastructureService
 from app.tools.n8n import N8nClient, N8nService
 from app.tools.n8n_fixtures import fixture_client
 from app.tools.website import WebsiteChecker
@@ -24,6 +26,7 @@ def create_app(
     website_checker: WebsiteChecker | None = None,
     browser_checker: BrowserChecker | None = None,
     n8n_service: N8nService | None = None,
+    infrastructure_service: InfrastructureService | None = None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
 
@@ -36,7 +39,7 @@ def create_app(
 
     application = FastAPI(
         title="AI Reliability Agent",
-        description="Website checks and synthetic browser flows. Health is backend liveness only.",
+        description="Read-only reliability checks. Health is backend process liveness only.",
         version="0.1.0",
         lifespan=lifespan,
         docs_url=None if config.environment == "production" else "/docs",
@@ -60,10 +63,14 @@ def create_app(
             nameservers=config.n8n_dns_nameservers,
         )
     application.state.n8n_service = n8n_service or N8nService(config.n8n_mode, n8n_client)
+    application.state.infrastructure_service = infrastructure_service or InfrastructureService(
+        config
+    )
     application.include_router(health_router)
     application.include_router(checks_router)
     application.include_router(browser_router)
     application.include_router(n8n_router)
+    application.include_router(infrastructure_router)
     return application
 
 

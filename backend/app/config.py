@@ -4,6 +4,13 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.tools.infrastructure_models import (
+    DatabaseName,
+    DeploymentId,
+    ProjectRef,
+    TeamId,
+    validate_database_host,
+)
 from app.tools.models import WebsiteTarget
 from app.tools.n8n_models import validate_n8n_url
 from app.tools.targets import validate_addresses
@@ -41,6 +48,53 @@ class Settings(BaseSettings):
     n8n_api_key: SecretStr | None = Field(default=None, repr=False)
     n8n_timeout_seconds: float = Field(default=10, ge=1, le=30)
     n8n_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
+    infrastructure_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    infrastructure_timeout_seconds: float = Field(default=10, ge=1, le=30)
+    infrastructure_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
+    vercel_token: SecretStr | None = Field(default=None, repr=False)
+    vercel_deployment_id: DeploymentId | None = None
+    vercel_team_id: TeamId | None = None
+    supabase_access_token: SecretStr | None = Field(default=None, repr=False)
+    supabase_project_ref: ProjectRef | None = None
+    postgres_host: str | None = Field(default=None, max_length=253)
+    postgres_port: Literal[5432, 6543] = 5432
+    postgres_dbname: DatabaseName | None = None
+    postgres_user: DatabaseName | None = None
+    postgres_password: SecretStr | None = Field(default=None, repr=False)
+
+    @field_validator("postgres_port", mode="before")
+    @classmethod
+    def parse_postgres_port(cls, value):
+        # Environment/dotenv values arrive as strings; Literal[int] does not coerce them.
+        return int(value) if value in ("5432", "6543") else value
+
+    @field_validator(
+        "vercel_deployment_id",
+        "vercel_team_id",
+        "supabase_project_ref",
+        "postgres_host",
+        "postgres_dbname",
+        "postgres_user",
+        mode="before",
+    )
+    @classmethod
+    def empty_optional_settings(cls, value):
+        return None if value == "" else value
+
+    @field_validator("postgres_host")
+    @classmethod
+    def validate_postgres_host(cls, value):
+        return validate_database_host(value) if value is not None else None
+
+    @field_validator("postgres_password", mode="before")
+    @classmethod
+    def validate_postgres_password(cls, value):
+        if value == "":
+            return None
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if isinstance(raw, str) and ("\0" in raw or len(raw) > 1024):
+            raise ValueError("PostgreSQL password is invalid")
+        return value
 
     @field_validator("n8n_base_url", mode="before")
     @classmethod
@@ -49,7 +103,9 @@ class Settings(BaseSettings):
             return None
         return validate_n8n_url(value)
 
-    @field_validator("website_dns_nameservers", "n8n_dns_nameservers")
+    @field_validator(
+        "website_dns_nameservers", "n8n_dns_nameservers", "infrastructure_dns_nameservers"
+    )
     @classmethod
     def validate_nameservers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(validate_addresses(list(value))) if value else ()
@@ -60,9 +116,13 @@ class Settings(BaseSettings):
             raise ValueError("Website target IDs must be unique")
         if self.environment == "production" and self.n8n_mode == "fixture":
             raise ValueError("Synthetic n8n mode is disabled in production")
+        if self.environment == "production" and self.infrastructure_mode == "fixture":
+            raise ValueError("Synthetic infrastructure mode is disabled in production")
         return self
 
-    @field_validator("nebius_api_key", "n8n_api_key", mode="before")
+    @field_validator(
+        "nebius_api_key", "n8n_api_key", "vercel_token", "supabase_access_token", mode="before"
+    )
     @classmethod
     def normalize_api_key(cls, value: object) -> object:
         if isinstance(value, str):
