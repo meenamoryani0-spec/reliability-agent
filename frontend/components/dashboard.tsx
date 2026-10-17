@@ -10,6 +10,7 @@ import {
 import type { Check, Incident, Snapshot } from "@/lib/contracts";
 import { actionLabel, age, humanize, isStale, latestChecks, matches, summary } from "@/lib/presentation";
 import { Empty, Evidence, Notice, Source, Status, VerificationScope } from "./primitives";
+import { OperatorLogout } from "./operator-login";
 import { Investigation } from "./investigation";
 import { IncidentDrawer } from "./incident-drawer";
 
@@ -23,7 +24,7 @@ const descriptions: Record<View, string> = {
   Connections: "Know what is enabled before drawing a conclusion.",
 };
 
-export function Dashboard() {
+export function Dashboard({ deployed = false }: { deployed?: boolean }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [view, setView] = useState<View>("Overview");
   const [source, setSource] = useState<Provenance>("all");
@@ -74,13 +75,13 @@ export function Dashboard() {
     <a href="#main" className="skip-link">Skip to workspace</a>
     <aside className="sidebar">
       <Link className="brand" href="/" aria-label="Reliability home"><span className="brand-symbol"><TargetIcon /></span><span>Reliability<span className="brand-subtitle">AI RELIABILITY AGENT</span></span></Link>
-      <div className="workspace-switch"><span className="workspace-avatar">L</span><span className="min-w-0"><strong>Local workspace</strong><small>Operator environment</small></span><ChevronRightIcon className="ml-auto size-4 text-slate-500" /></div>
+      <div className="workspace-switch"><span className="workspace-avatar">L</span><span className="min-w-0"><strong>{deployed ? "Operator workspace" : "Local workspace"}</strong><small>Operator environment</small></span><ChevronRightIcon className="ml-auto size-4 text-slate-500" /></div>
       <p className="nav-label">WORKSPACE</p>
       <nav aria-label="Main navigation" className="space-y-1">{navigation.map(({ name, icon: Icon }) => <button key={name} className={`nav-item ${view === name ? "nav-active" : ""}`} onClick={() => changeView(name)} aria-current={view === name ? "page" : undefined}><Icon className="size-[18px]" />{name}{name === "Incidents" && active.length > 0 && <span className="nav-count">{active.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="guard-icon"><CheckIcon /></div><p className="text-[13px] font-medium text-slate-200">Human in the loop.</p><p className="mt-2 text-xs leading-5 text-slate-400">Every remediation needs explicit operator approval.</p><div className="sidebar-divider" /><span className="flex items-center gap-2 text-xs text-slate-400"><span className="size-1.5 rounded-full bg-emerald-400" />Local access only<span className="ml-auto font-mono text-[10px]">PHASE 13</span></span></div>
+      <div className="sidebar-bottom"><div className="guard-icon"><CheckIcon /></div><p className="text-[13px] font-medium text-slate-200">Human in the loop.</p><p className="mt-2 text-xs leading-5 text-slate-400">Every remediation needs explicit operator approval.</p><div className="sidebar-divider" /><span className="flex items-center gap-2 text-xs text-slate-400"><span className="size-1.5 rounded-full bg-emerald-400" />{deployed ? "Authenticated access" : "Local access only"}<span className="ml-auto font-mono text-[10px]">{deployed ? "DEPLOYED" : "LOCAL"}</span></span></div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><div className="flex min-w-0 items-center gap-2 text-xs text-slate-400"><LayersIcon className="size-4" /><span className="hidden sm:inline">Workspace</span><ChevronRightIcon /><span className="font-medium text-slate-700">{view}</span></div><div className="flex items-center gap-3"><span className="local-tag">LOCAL</span><span className="topbar-divider" /><div className="operator-mark" aria-label="Local operator">OP</div></div></header>
+      <header className="topbar"><div className="flex min-w-0 items-center gap-2 text-xs text-slate-400"><LayersIcon className="size-4" /><span className="hidden sm:inline">Workspace</span><ChevronRightIcon /><span className="font-medium text-slate-700">{view}</span></div><div className="flex items-center gap-3">{deployed && <OperatorLogout />}<span className="local-tag">{deployed ? "AUTHENTICATED" : "LOCAL"}</span><span className="topbar-divider" /><div className="operator-mark" aria-label={deployed ? "Authenticated operator" : "Local operator"}>OP</div></div></header>
       <main id="main" className="main-content">
         <div className="page-heading"><div><p className="eyebrow">OPERATIONS, WITH CONTEXT</p><h1>{view === "Overview" ? "Reliability overview" : view}</h1><p className="mt-2 text-sm text-slate-500">{descriptions[view]}</p></div><button className="button-secondary shrink-0" onClick={() => void refresh()} disabled={pending}><ReloadIcon className={`size-4 ${pending ? "refreshing" : ""}`} />{pending ? "Refreshing…" : "Refresh records"}</button></div>
         {error && <div className="mb-5"><Notice>Workspace refresh failed.{data ? " Previous records are retained and may be stale." : " Start the local frontend and backend, then refresh."}</Notice></div>}
@@ -106,7 +107,7 @@ export function Dashboard() {
             const service = data.services.data?.find((s) => s.id === v.service_id);
             return service ? includeSource(service.synthetic) && matches(search, v.id, v.workflow_id, v.new_execution_id) : source === "all" && matches(search, v.id, v.workflow_id, v.new_execution_id);
           }).map((v) => <div key={v.id} className="border-t border-slate-100 p-6"><div className="flex flex-wrap gap-2"><Status value={v.result} />{data.services.data?.find((s) => s.id === v.service_id) && <Source synthetic={data.services.data.find((s) => s.id === v.service_id)!.synthetic} />}</div><p className="mt-3 text-sm">Execution {v.new_execution_id} · {humanize(v.reason)}</p><p className="mt-2 text-xs text-slate-400">Recorded {age(v.observed_at, now)} · n8n required nodes</p><VerificationScope /><button className="text-button mt-4" onClick={() => setSelected(v.incident_id)}>Inspect proof<ArrowTopRightIcon /></button></div>)}</section></div>}
-          {view === "Connections" && <Connections data={data} />}
+          {view === "Connections" && <Connections data={data} deployed={deployed} />}
           <footer className="workspace-footer"><span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${data.health.data ? "bg-emerald-600" : "bg-slate-400"}`} />Backend process {data.health.data ? "reachable" : "unavailable"}<span className="hidden sm:inline">· liveness only</span></span><span>Records fetched {age(data.fetchedAt, now)} · Manual refresh</span></footer>
         </>}
       </main>
@@ -136,14 +137,14 @@ function IncidentList({ incidents, onSelect, now, unavailable }: { incidents: In
 function CheckHistory({ checks, now, unavailable }: { checks: Check[]; now: number; unavailable: boolean }) {
   return !checks.length ? <Empty title={unavailable ? "Check history unavailable" : "No matching checks"}>Try a different filter, or run a registered backend check.</Empty> : <div className="divide-y divide-slate-100">{checks.map((c) => <div className="px-6 py-5" key={c.id}><div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><h3 className="break-all text-sm font-medium">{c.component} <span className="font-normal text-slate-400">/ {c.kind}</span></h3><p className="mt-2 text-xs text-slate-500">{summary(c)}</p></div><Status value={c.status} /></div><div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400"><Source synthetic={c.synthetic} /><time dateTime={c.observed_at} title={c.observed_at}>{age(c.observed_at, now)}</time>{isStale(c, now) && <span className="text-amber-700">Stale observation</span>}<span className="font-mono text-[10px]">{c.id.slice(0, 8)}</span></div><Evidence value={c.payload} /></div>)}</div>;
 }
-function Connections({ data }: { data: Snapshot }) {
+function Connections({ data, deployed }: { data: Snapshot; deployed: boolean }) {
   return <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]"><section className="panel"><SectionHeading title="Workspace capabilities" subtitle="Configuration is separate from successful connectivity" />{[
     { title: "Backend process", value: data.health.data ? "Reachable" : "Unavailable", detail: "Process liveness only. This does not verify monitored systems." },
     { title: "Application history", value: data.storage.data?.state ?? "Unavailable", detail: `Storage: ${data.storage.data?.mode ?? "unknown"}. Migrations run explicitly, never on startup.` },
     { title: "Investigation", value: data.agent.data?.mode ?? "Unavailable", detail: data.agent.data?.mode === "fixture" ? "Scripted inference with synthetic provider fixtures. Live AI remains unverified." : "Live mode can send your question and restricted evidence to Nebius. Keep secrets out of questions." },
     { title: "n8n retry policy", value: data.actionPolicy.data?.mode ?? "Unavailable", detail: "One-shot local operator approval. A browser cannot approve or execute a retry." },
     { title: "Recovery verification", value: data.recoveryPolicy.data?.mode ?? "Unavailable", detail: "Local operator CLI only. Exact new execution and configured required nodes must pass." },
-  ].map((c) => <div className="border-t border-slate-100 px-6 py-5" key={c.title}><div className="flex items-center justify-between gap-4"><h3 className="text-sm font-medium">{c.title}</h3><span className="source">{humanize(c.value)}</span></div><p className="mt-2 max-w-xl text-xs leading-6 text-slate-500">{c.detail}</p></div>)}</section><section className="panel self-start p-6"><div className="mb-4 grid size-10 place-content-center rounded-xl bg-emerald-50 text-emerald-700"><LayersIcon className="size-5" /></div><h2 className="text-base font-medium">Built around evidence.</h2><p className="mt-3 text-sm leading-6 text-slate-500">This local workspace reads the existing backend. Provider secrets stay there. A connection setting is never displayed as proof of a working integration.</p><div className="mt-5 border-t border-slate-100 pt-5 text-xs leading-6 text-slate-500">Production hosting and authenticated access controls belong to Phase 14. Keep both servers bound to loopback.</div></section></div>;
+  ].map((c) => <div className="border-t border-slate-100 px-6 py-5" key={c.title}><div className="flex items-center justify-between gap-4"><h3 className="text-sm font-medium">{c.title}</h3><span className="source">{humanize(c.value)}</span></div><p className="mt-2 max-w-xl text-xs leading-6 text-slate-500">{c.detail}</p></div>)}</section><section className="panel self-start p-6"><div className="mb-4 grid size-10 place-content-center rounded-xl bg-emerald-50 text-emerald-700"><LayersIcon className="size-5" /></div><h2 className="text-base font-medium">Built around evidence.</h2><p className="mt-3 text-sm leading-6 text-slate-500">This workspace reads the configured backend. Provider secrets stay there. A connection setting is never displayed as proof of a working integration.</p><div className="mt-5 border-t border-slate-100 pt-5 text-xs leading-6 text-slate-500">{deployed ? "Authenticated single-operator access. Provider integrations and customer outcomes require separate live validation." : "Local mode: keep both servers bound to loopback. Production mode requires operator authentication and HTTPS."}</div></section></div>;
 }
 function Loading() { return <div role="status" aria-label="Loading workspace" className="space-y-6"><div className="skeleton h-32 rounded-2xl" /><div className="grid gap-6 lg:grid-cols-[1.8fr_1fr]"><div className="skeleton h-96 rounded-2xl" /><div className="skeleton h-80 rounded-2xl" /></div></div>; }
 function SignalArtwork() {

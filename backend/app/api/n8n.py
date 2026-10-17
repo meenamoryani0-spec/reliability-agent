@@ -1,19 +1,17 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 
 from app.api.history import capture_history
 from app.db.snapshots import source_for
+from app.security import require_authenticated
 from app.tools.n8n_models import Cursor, ExecutionId, N8nReadResult, ResourceId
 
 router = APIRouter(tags=["read-only n8n inspection"])
 
 
 def service(request: Request):
-    if request.app.state.settings.environment == "production":
-        raise HTTPException(
-            status_code=404, detail="n8n inspection requires deployment access controls"
-        )
+    require_authenticated(request)
     return request.app.state.n8n_service
 
 

@@ -130,7 +130,7 @@ class InvestigationService:
 
     async def investigate(self, question):
         state = RunState()
-        if self._closed or self._config.environment == "production":
+        if self._closed or not self._config.operations_access_enabled:
             return self._report(state, "REJECTED", "access_disabled")
         if self._config.investigation_mode == "disabled":
             return self._report(state, "REJECTED", "disabled")

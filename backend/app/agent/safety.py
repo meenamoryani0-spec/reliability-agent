@@ -45,6 +45,7 @@ def configured_secrets(config):
         value.get_secret_value()
         for value in (
             config.nebius_api_key,
+            config.api_access_token,
             config.n8n_api_key,
             config.vercel_token,
             config.supabase_access_token,

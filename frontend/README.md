@@ -123,3 +123,17 @@ interactive illustrative workflow, product explanation, operating boundaries and
 links to the application. `/dashboard` is the operational workspace. Both share
 the same palette. The homepage makes no provider requests; its stage controls
 only explain the example and never execute checks or actions.
+
+## Authenticated deployment mode
+
+Read `../docs/DEPLOYMENT.md`. Production mode uses a generated operator key,
+eight-hour signed secure cookie, exact configured HTTPS origin and server bearer
+authentication to a fixed HTTPS backend. Data handlers enforce session access
+individually. The public homepage has no operational data; `/dashboard` requires
+sign-in. `/login` redirects to the dashboard in local mode.
+
+The release includes standalone output and an optional non-root Dockerfile.
+The local production-mode TLS smoke runs the actual standalone server. Vercel
+requires explicit production configuration and canonical origin; do not use
+production secrets in preview deployments. A public deployment and Linux Docker
+image execution remain unverified.

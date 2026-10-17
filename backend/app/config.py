@@ -35,6 +35,42 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    api_access_token: SecretStr | None = Field(default=None, repr=False)
+    api_allowed_hosts: list[str] = Field(default_factory=list, max_length=10)
+
+    @property
+    def deployment_access_configured(self) -> bool:
+        return self.api_access_token is not None and bool(self.api_allowed_hosts)
+
+    @property
+    def operations_access_enabled(self) -> bool:
+        return self.environment != "production" or self.deployment_access_configured
+
+    @field_validator("api_access_token", mode="before")
+    @classmethod
+    def validate_access_token(cls, value):
+        import re
+
+        if value is None or value == "":
+            return None
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if not isinstance(raw, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", raw):
+            raise ValueError("API token must be a generated URL-safe secret of at least 32 bytes")
+        return value
+
+    @field_validator("api_allowed_hosts")
+    @classmethod
+    def validate_api_hosts(cls, hosts):
+        import re
+
+        if any(
+            not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?", host)
+            or ".." in host
+            for host in hosts
+        ):
+            raise ValueError("API hosts must be exact lowercase hostnames with optional ports")
+        return hosts
+
     nebius_api_key: SecretStr | None = Field(default=None, repr=False)
     nebius_model: str = Field(
         default="nvidia/Nemotron-3_5-Lightning",
@@ -71,7 +107,24 @@ class Settings(BaseSettings):
     storage_mode: Literal["disabled", "local", "postgresql"] = "disabled"
     storage_sqlite_file: str = "work/data/reliability.sqlite3"
     storage_database_url: SecretStr | None = Field(default=None, repr=False)
+    storage_ssl_ca_file: str | None = Field(default=None, max_length=1024)
     storage_allow_loopback: bool = False
+
+    @field_validator("storage_ssl_ca_file", mode="before")
+    @classmethod
+    def validate_storage_ca(cls, value):
+        if value is None or value == "":
+            return None
+        try:
+            import ssl
+
+            path = Path(value)
+            if not path.is_absolute() or not path.is_file() or path.stat().st_size > 131072:
+                raise ValueError()
+            ssl.create_default_context(cafile=str(path))
+        except (ValueError, OSError, TypeError):
+            raise ValueError("Application storage CA file is invalid") from None
+        return value
 
     @field_validator("storage_database_url", mode="before")
     @classmethod
@@ -173,7 +226,7 @@ class Settings(BaseSettings):
                 )
             if self.n8n_retry_mode == "live" and not (self.n8n_base_url and self.n8n_api_key):
                 raise ValueError("Live retry requires explicit n8n configuration")
-        if self.environment == "production" and self.incidents_enabled:
+        if not self.operations_access_enabled and self.incidents_enabled:
             raise ValueError("Automatic incidents require deployment access controls")
         if len({target.id for target in self.website_targets}) != len(self.website_targets):
             raise ValueError("Website target IDs must be unique")

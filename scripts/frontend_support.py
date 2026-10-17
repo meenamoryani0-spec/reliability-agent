@@ -22,6 +22,7 @@ def fixture_environment():
         "STORAGE_MODE": "local",
         "STORAGE_SQLITE_FILE": f"work/data/frontend-fixture-{uuid4().hex}.sqlite3",
         "STORAGE_DATABASE_URL": "",
+        "STORAGE_SSL_CA_FILE": "",
         "STORAGE_ALLOW_LOOPBACK": "false",
         "INCIDENTS_ENABLED": "true",
         "INVESTIGATION_MODE": "fixture",
@@ -100,7 +101,9 @@ def seed(client, environment):
 
 
 @contextmanager
-def frontend_server(backend_url, *, port=0, name="frontend-smoke"):
+def frontend_server(
+    backend_url, *, port=0, name="frontend-smoke", overrides=None, standalone=False
+):
     if not port:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -115,18 +118,27 @@ def frontend_server(backend_url, *, port=0, name="frontend-smoke"):
         "RELIABILITY_BACKEND_URL": str(backend_url).rstrip("/"),
         "RELIABILITY_DASHBOARD_MODE": "local",
         "NEXT_TELEMETRY_DISABLED": "1",
+        **(overrides or {}),
     }
+    arguments = [
+        node,
+        str(ROOT / "frontend/node_modules/next/dist/bin/next"),
+        "start",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        str(port),
+    ]
+    if standalone:
+        release = ROOT / "frontend/.next/standalone"
+        shutil.copytree(
+            ROOT / "frontend/.next/static", release / ".next/static", dirs_exist_ok=True
+        )
+        arguments = [node, str(release / "server.js")]
+        environment.update(PORT=str(port), HOSTNAME="127.0.0.1")
     with (logs / f"{name}.log").open("w", encoding="utf-8") as output:
         process = subprocess.Popen(
-            [
-                node,
-                str(ROOT / "frontend/node_modules/next/dist/bin/next"),
-                "start",
-                "--hostname",
-                "127.0.0.1",
-                "--port",
-                str(port),
-            ],
+            arguments,
             cwd=ROOT / "frontend",
             env=environment,
             stdout=output,

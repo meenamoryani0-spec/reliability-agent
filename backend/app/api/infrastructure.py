@@ -2,16 +2,14 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from app.api.history import capture_history
 from app.db.snapshots import source_for
+from app.security import require_authenticated
 from app.tools.infrastructure_models import CHECK_IDS, InfrastructureResult
 
 router = APIRouter(tags=["read-only infrastructure checks"])
 
 
 def service(request: Request):
-    if request.app.state.settings.environment == "production":
-        raise HTTPException(
-            status_code=404, detail="Infrastructure inspection requires deployment access controls"
-        )
+    require_authenticated(request)
     return request.app.state.infrastructure_service
 
 

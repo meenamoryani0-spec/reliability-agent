@@ -28,6 +28,9 @@ $env:POSTGRES_PASSWORD = ''
 $env:STORAGE_MODE = 'disabled'
 $env:STORAGE_SQLITE_FILE = 'work/data/reliability.sqlite3'
 $env:STORAGE_DATABASE_URL = ''
+$env:STORAGE_SSL_CA_FILE = ''
+$env:API_ACCESS_TOKEN = ''
+$env:API_ALLOWED_HOSTS = '[]'
 $env:STORAGE_ALLOW_LOOPBACK = 'false'
 Push-Location (Join-Path $ProjectRoot 'backend')
 try {

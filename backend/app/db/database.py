@@ -52,5 +52,5 @@ def create_storage_engine(config):
         "require_auth": "scram-sha-256,password",
     }
     if not loopback:
-        args["sslrootcert"] = certifi.where()
+        args["sslrootcert"] = config.storage_ssl_ca_file or certifi.where()
     return create_engine(url, connect_args=args, poolclass=NullPool, hide_parameters=True)

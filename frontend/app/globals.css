@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./landing.css";
 @import "./workspace-dark.css";
+@import "./login.css";
 
 @theme inline {
   --font-sans: var(--font-geist-sans);

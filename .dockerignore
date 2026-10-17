@@ -1,0 +1,10 @@
+# Backend image context is deliberately an allowlist. Provider secrets, work/,
+# source-control metadata and the development virtual environment never enter it.
+**
+!backend/
+!backend/Dockerfile
+!backend/requirements.txt
+!backend/app/
+!backend/app/**
+**/__pycache__/
+**/*.pyc

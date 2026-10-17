@@ -110,7 +110,13 @@ class ToolRegistry:
         self._slot = threading.Lock()
         self._task = None
         self._closed = False
-        self._specs = MappingProxyType({spec.name: spec for spec in SPECS})
+        self._specs = MappingProxyType(
+            {
+                spec.name: spec
+                for spec in SPECS
+                if config.environment != "production" or spec.name != "test_website_flow"
+            }
+        )
         self._handlers = MappingProxyType(
             {
                 "list_website_targets": self._list_websites,
@@ -143,7 +149,7 @@ class ToolRegistry:
 
         Server validation is authoritative; no provider-enforced strict mode is assumed.
         """
-        if self._config.environment == "production" or self._closed:
+        if not self._config.operations_access_enabled or self._closed:
             return []
         definitions = []
         for spec in self._specs.values():
@@ -180,7 +186,7 @@ class ToolRegistry:
         }
 
     async def execute(self, name: str, arguments_json: str) -> ToolResult:
-        if self._config.environment == "production" or self._closed:
+        if not self._config.operations_access_enabled or self._closed:
             return ToolResult(name=None, status="REJECTED", reason="access_disabled")
         if not isinstance(name, str) or name not in self._specs:
             return ToolResult(name=None, status="REJECTED", reason="unknown_tool")

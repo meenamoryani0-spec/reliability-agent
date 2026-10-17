@@ -1,16 +1,19 @@
 # Current implementation state
 
-Updated 17 October 2026 after verified Phase 13.
+Updated 17 October 2026 after locally verified Phase 14 release preparation.
 Repository: `D:\CODEX MAIN\2026-10-09\g\outputs\reliability-agent`.
-Read this file and the phase report. HANDOFF.md retains the original roadmap;
+Read docs/PHASE-14.md, docs/DEPLOYMENT.md and this file. HANDOFF.md retains the original roadmap;
 its initial CURRENT STATE is historical.
 
 Phases 1–11 provide the backend, monitoring adapters, real Chromium synthetic
 flows, SQLite/PostgreSQL history, 13 bounded read tools, bounded investigation,
 automatic unhealthy-check incidents and a separately approved one-shot n8n retry.
 Phase 12 adds local operator verification of the exact accepted new execution.
-Phase 13 adds the local Next.js dashboard; deployment, automatic provider retry
-and a scheduler remain outside the current implementation.
+Phase 13 adds the Next.js dashboard. A subsequent frontend refinement adds a
+charcoal/green product landing page at / and the operational app at /dashboard.
+Phase 14 adds single-operator deployment access controls and release packaging;
+actual cloud deployment, automatic provider retry and a scheduler remain outside
+the verified implementation.
 
 The dashboard has Overview, Incidents, Checks, Activity and Connections views,
 bounded backend investigation, linked sanitized evidence, supported hypotheses,
@@ -18,8 +21,9 @@ recommendations, source/status/search filters, approval/action audit, and exact
 historical recovery proof. Desktop/mobile and explicit loading/empty/error states
 are verified. Records are bounded to the latest 100 per collection. Refresh reads
 history; observations older than five minutes are marked stale. No provider
-credentials, arbitrary proxy, browser approval/retry/verification/resolution route,
-or production identity are added. Run scripts/frontend-demo.ps1 for a fresh,
+credentials or arbitrary proxy are exposed to the browser. There are no browser
+approval/retry/verification/resolution routes. Phase 14 separately adds authenticated
+operator access. Run scripts/frontend-demo.ps1 for a fresh,
 explicit synthetic fixture preview, or frontend-run.ps1 alongside run.ps1 for the
 existing backend. Read frontend/README.md and docs/PHASE-13.md.
 
@@ -73,7 +77,37 @@ n8n reads/retry/recovery, Vercel, Supabase and monitored/cloud PostgreSQL remain
 unverified. Synthetic execution success does not establish customer outcomes.
 The separate application store is tested on real isolated local PostgreSQL.
 
-Two roadmap phases follow Phase 13: **14 deployment/access controls**, and
-**15 intentional-failure demo**. Stop after the verified local Phase 13
-commit until the user authorizes the next phase. Keep all artifacts on D:;
-do not push, deploy, add a remote/license or alter provider secrets.
+Phase 14 local release preparation is implemented. Production supports a generated
+operator key with a signed eight-hour Secure/HttpOnly/SameSite=Strict cookie, exact
+canonical HTTPS Host/Origin, fixed HTTPS server-to-backend bearer authentication,
+server-side secret isolation, per-instance request budgets, and CORS denial for
+browser-to-backend traffic. Production synthetic fixtures and retry/recovery are
+still rejected. The catalog has 12 production read tools, excluding the synthetic
+browser fixture; local mode keeps 13. Login is single-operator access, without
+SSO/MFA/tenants/individual identities. Logout clears one browser cookie; key rotation
+revokes all stateless sessions. Hosting must enforce shared/edge traffic limits.
+
+The production entry point validates configuration and PostgreSQL before binding
+one bounded worker, disables proxy-header trust/access logs and drains shutdown.
+/ready checks configured access and schema head with a bounded, reused worker.
+It never migrates or calls monitored providers. A validated mounted CA can be set
+for application PostgreSQL; verify-full and hostname verification remain enforced.
+Two non-root Dockerfiles, context exclusions, environment templates, standalone
+frontend output, a secret generator, local TLS smoke and deployed acceptance script
+are prepared. See docs/PHASE-14.md for exact final verification evidence.
+
+Actual cloud accounts/domains are not selected. Docker is unavailable locally, so
+image builds/Linux execution are unverified. Supabase application storage/TLS,
+cloud frontend/backend operation, edge configuration and deployed acceptance remain
+unverified. This is not a completed live Phase 14 deployment. Nothing was pushed,
+provisioned or deployed; existing .env/provider settings were not edited.
+
+Remaining roadmap: finish Phase 14 cloud/container acceptance, then Phase 15's
+intentional-failure demo. Stop after committing this locally verified preparation;
+do not start Phase 15 automatically. All new project artifacts remain on D:.
+
+Phase 14 final regression: 974 passed with no skips in 343.21 seconds. The frontend
+passes 20 tests, lint/types/standalone build and full npm audit (zero findings).
+Actual standalone Next.js/Uvicorn production-mode local TLS login/logout and backend
+HTTP smoke pass. Ruff lint/format (118 files) and pip check pass. Cloud/container
+acceptance is still pending; read the Phase 14 report for limits.

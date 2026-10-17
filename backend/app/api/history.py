@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.db.repository import StorageError
+from app.security import require_authenticated
 from app.tools.models import CheckStatus
 
 router = APIRouter(tags=["stored reliability history"])
@@ -23,8 +24,7 @@ async def capture_history(request: Request, response: Response, result, source: 
 
 
 def require_local_access(request):
-    if request.app.state.settings.environment == "production":
-        raise HTTPException(status_code=404, detail="History requires deployment access controls")
+    require_authenticated(request)
 
 
 async def read(request, operation, **kwargs):

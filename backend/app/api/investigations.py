@@ -2,15 +2,13 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.agent.investigation_models import InvestigationReport, InvestigationRequest
 from app.agent.safety import load_object
+from app.security import require_authenticated
 
 router = APIRouter(tags=["bounded AI investigation"])
 
 
 def service(request):
-    if request.app.state.settings.environment == "production":
-        raise HTTPException(
-            status_code=404, detail="Investigation requires deployment access controls"
-        )
+    require_authenticated(request)
     return request.app.state.investigator
 
 

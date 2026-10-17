@@ -1,4 +1,6 @@
 import "server-only";
+import { authenticated } from "./auth";
+import { backendOrigin, deployment, sameOrigin } from "./deployment";
 import { z } from "zod";
 import {
   actionPolicySchema, actionSchema, agentSchema, assessmentSchema, checkSchema, id,
@@ -7,30 +9,10 @@ import {
 } from "./contracts";
 
 const MAX_RESPONSE_BYTES = 1_048_576;
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-export function backendBase(environment: Record<string, string | undefined> = process.env): string {
-  if ((environment.RELIABILITY_DASHBOARD_MODE ?? "local") !== "local") throw new Error("local_only");
-  const url = new URL(environment.RELIABILITY_BACKEND_URL ?? "http://127.0.0.1:8000");
-  if (!LOOPBACK.has(url.hostname) || url.protocol !== "http:" || url.username || url.password
-    || url.pathname !== "/" || url.search || url.hash) throw new Error("invalid_backend_configuration");
-  return url.origin;
-}
+export const backendBase = backendOrigin;
 
 export function localRequest(request: Request, mutation = false): boolean {
-  try {
-    backendBase();
-    const host = request.headers.get("host");
-    if (!host) return false;
-    const target = new URL(`http://${host}`);
-    const internal = new URL(request.url);
-    if (!LOOPBACK.has(target.hostname) || target.host !== host || target.pathname !== "/"
-      || target.username || target.password || !LOOPBACK.has(internal.hostname)) return false;
-    const origin = request.headers.get("origin");
-    if (origin && origin !== target.origin) return false;
-    if (mutation && (origin !== target.origin || request.headers.get("content-type")?.split(";")[0].trim() !== "application/json")) return false;
-    return request.headers.get("sec-fetch-site") !== "cross-site";
-  } catch { return false; }
+  return sameOrigin(request, mutation) && authenticated(request);
 }
 
 export async function boundedJson(response: Response, maximum = MAX_RESPONSE_BYTES): Promise<unknown> {
@@ -58,10 +40,14 @@ export async function boundedJson(response: Response, maximum = MAX_RESPONSE_BYT
 export async function backendRead<T>(path: string, schema: z.ZodType<T>, options?: { question: string }): Promise<ReadResult<T>> {
   try {
     const base = backendBase();
+    const config = deployment();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (options) headers["Content-Type"] = "application/json";
+    if (config) headers.Authorization = `Bearer ${config.token}`;
     const response = await fetch(`${base}${path}`, {
       method: options ? "POST" : "GET", cache: "no-store", redirect: "error",
       signal: AbortSignal.timeout(options ? 125_000 : 8000),
-      headers: options ? { "Content-Type": "application/json", Accept: "application/json" } : { Accept: "application/json" },
+      headers,
       body: options ? JSON.stringify(options) : undefined,
     });
     if (!response.ok) {

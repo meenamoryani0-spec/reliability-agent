@@ -17,6 +17,7 @@ from app.api.tools import router as tools_router
 from app.config import Settings
 from app.db.service import HistoryService
 from app.logging import configure_logging
+from app.security import AccessBoundary
 from app.tools.browser import BrowserChecker
 from app.tools.infrastructure import InfrastructureService
 from app.tools.n8n import N8nClient, N8nService
@@ -63,6 +64,7 @@ def create_app(
         redoc_url=None,
         openapi_url=None if config.environment == "production" else "/openapi.json",
     )
+    application.add_middleware(AccessBoundary, config=config)
     application.state.settings = config
     application.state.history = history
     application.state.website_targets = {target.id: target for target in config.website_targets}

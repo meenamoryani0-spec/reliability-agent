@@ -1,5 +1,6 @@
 import { boundedJson, investigate, localRequest } from "@/lib/backend";
 import { questionSchema } from "@/lib/contracts";
+export const maxDuration = 130;
 export async function POST(request: Request) {
   if (!localRequest(request, true)) return Response.json({ error: "same_origin_json_required" }, { status: 403 });
   try {

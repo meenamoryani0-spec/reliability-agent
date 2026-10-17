@@ -22,6 +22,19 @@ class HistoryService:
         self.state = "disabled" if self.engine is None else "not_verified"
         self._pending = set()
         self._closed = False
+        self._readiness_task = None
+
+    async def readiness(self):
+        if self._closed or self.engine is None:
+            return False
+        if self._readiness_task is None or self._readiness_task.done():
+            self._readiness_task = asyncio.create_task(asyncio.to_thread(self.verify))
+            self._pending.add(self._readiness_task)
+            self._readiness_task.add_done_callback(self._pending.discard)
+        try:
+            return await asyncio.wait_for(asyncio.shield(self._readiness_task), timeout=3)
+        except Exception:
+            return False
 
     def describe(self):
         return {

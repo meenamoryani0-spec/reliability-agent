@@ -773,3 +773,21 @@ to discard recovery history. Startup does not migrate. The PostgreSQL test harne
 also accepts `-TemplateDir` pointing to a verified, cleanly stopped project-only
 `work/postgres-tests/cluster-*/data` directory; it copies it, creates a new scratch
 database, establishes fresh SCRAM authentication and stops only its own copy.
+
+## Phase 14 - authenticated release preparation
+
+The root is now a product landing page, with the dark operational workspace at
+`/dashboard`. See `docs/FRONTEND-REFINEMENT.md` for the visual checkpoint.
+
+Production access now supports a generated single-operator login, signed secure
+session, fixed HTTPS frontend-to-backend service token, exact Host/Origin rules,
+no browser-to-backend CORS, bounded request budgets and schema-aware `/ready`.
+Synthetic browser tools and production remediation remain disabled. Existing
+local development and fixture behavior remain available.
+
+`backend/Dockerfile`, `frontend/Dockerfile`, deployment environment templates,
+explicit production startup, key generation and TLS/deployed smoke scripts are
+prepared. Read `docs/DEPLOYMENT.md` and `docs/PHASE-14.md` before enabling anything.
+The local implementation is distinct from an actual cloud deployment. Docker
+execution, selected cloud accounts/domains, Supabase TLS/storage and live provider
+validation remain outstanding. No cloud resources have been provisioned.
