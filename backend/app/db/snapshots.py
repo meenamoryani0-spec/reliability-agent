@@ -45,6 +45,30 @@ INFRASTRUCTURE_EVIDENCE = {
 }
 
 
+def source_for(result, config):
+    """Same internal history identity for API and model-tool observations."""
+    if isinstance(result, BrowserFlowResult):
+        return "synthetic-browser-v1"
+    if isinstance(result, N8nReadResult):
+        return "n8n-fixture-v1" if result.synthetic else (config.n8n_base_url or "unconfigured")
+    if isinstance(result, InfrastructureResult):
+        if result.synthetic:
+            return "infrastructure-fixture-v1"
+        if result.component.startswith("vercel"):
+            return "vercel:" + (config.vercel_deployment_id or "unconfigured")
+        if result.component.startswith("supabase"):
+            return "supabase:" + (config.supabase_project_ref or "unconfigured")
+        return ":".join(
+            (
+                config.postgres_host or "unconfigured",
+                str(config.postgres_port),
+                config.postgres_dbname or "",
+                config.postgres_user or "",
+            )
+        )
+    raise ValueError("Unsupported source identity")
+
+
 class Snapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     category: Literal["website", "n8n", "infrastructure"]

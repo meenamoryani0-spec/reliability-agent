@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.api.history import capture_history
+from app.db.snapshots import source_for
 from app.tools.n8n_models import Cursor, ExecutionId, N8nReadResult, ResourceId
 
 router = APIRouter(tags=["read-only n8n inspection"])
@@ -47,9 +48,5 @@ async def execution(
     execution_id: ExecutionId, request: Request, response: Response
 ) -> N8nReadResult:
     result = await service(request).read("execution", execution_id=execution_id)
-    source = (
-        "n8n-fixture-v1"
-        if result.synthetic
-        else (request.app.state.settings.n8n_base_url or "unconfigured")
-    )
+    source = source_for(result, request.app.state.settings)
     return await capture_history(request, response, result, source)

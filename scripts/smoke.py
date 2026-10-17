@@ -96,6 +96,12 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
             websites.raise_for_status()
             if websites.json() != []:
                 raise RuntimeError("Smoke test must start with no configured website targets")
+            tools = client.get("/tools")
+            tools.raise_for_status()
+            if len(tools.json()["tools"]) != 13 or tools.json()["policy"]["max_in_flight"] != 1:
+                raise RuntimeError("Tool catalog or execution policy is unexpected")
+            if client.post("/tools/execute", json={}).status_code != 404:
+                raise RuntimeError("Unexpected public tool-execution route")
             missing = client.post("/checks/websites/unconfigured")
             if missing.status_code != 404:
                 raise RuntimeError("Unknown website target was not rejected")
@@ -196,6 +202,7 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
                         "body": health.json(),
                         "docs_status": docs.status_code,
                         "website_list_status": websites.status_code,
+                        "tool_catalog_count": len(tools.json()["tools"]),
                         "unconfigured_target_status": missing.status_code,
                         "invalid_check_kind_status": invalid.status_code,
                         "browser_flows": browser_results,

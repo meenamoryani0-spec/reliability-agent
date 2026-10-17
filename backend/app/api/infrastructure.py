@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from app.api.history import capture_history
+from app.db.snapshots import source_for
 from app.tools.infrastructure_models import CHECK_IDS, InfrastructureResult
 
 router = APIRouter(tags=["read-only infrastructure checks"])
@@ -27,20 +28,5 @@ async def check_infrastructure(
     if check_id not in CHECK_IDS:
         raise HTTPException(status_code=404, detail="Infrastructure check is not registered")
     result = await adapter.check(check_id)
-    config = request.app.state.settings
-    if result.synthetic:
-        source = "infrastructure-fixture-v1"
-    elif check_id.startswith("vercel"):
-        source = "vercel:" + (config.vercel_deployment_id or "unconfigured")
-    elif check_id.startswith("supabase"):
-        source = "supabase:" + (config.supabase_project_ref or "unconfigured")
-    else:
-        source = ":".join(
-            (
-                config.postgres_host or "unconfigured",
-                str(config.postgres_port),
-                config.postgres_dbname or "",
-                config.postgres_user or "",
-            )
-        )
+    source = source_for(result, request.app.state.settings)
     return await capture_history(request, response, result, source)

@@ -4,12 +4,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.agent.tool_registry import ToolRegistry
 from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
 from app.api.history import router as history_router
 from app.api.infrastructure import router as infrastructure_router
 from app.api.n8n import router as n8n_router
+from app.api.tools import router as tools_router
 from app.config import Settings
 from app.db.service import HistoryService
 from app.logging import configure_logging
@@ -40,7 +42,10 @@ def create_app(
         try:
             yield
         finally:
-            await history.close()
+            try:
+                await application.state.tool_registry.close()
+            finally:
+                await history.close()
             logger.info("Backend stopped")
 
     application = FastAPI(
@@ -73,12 +78,21 @@ def create_app(
     application.state.infrastructure_service = infrastructure_service or InfrastructureService(
         config
     )
+    application.state.tool_registry = ToolRegistry(
+        config,
+        website_checker=application.state.website_checker,
+        browser_checker=application.state.browser_checker,
+        n8n_service=application.state.n8n_service,
+        infrastructure_service=application.state.infrastructure_service,
+        history=history,
+    )
     application.include_router(health_router)
     application.include_router(checks_router)
     application.include_router(browser_router)
     application.include_router(n8n_router)
     application.include_router(infrastructure_router)
     application.include_router(history_router)
+    application.include_router(tools_router)
     return application
 
 

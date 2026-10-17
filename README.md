@@ -16,6 +16,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Read-only n8n workflow/execution inspection with sanitized node error evidence and local fixtures.
 - Read-only Vercel deployment/events, Supabase project/service-health, and PostgreSQL probes.
 - Application history storage, explicit Alembic migrations, and service/check/incident repositories.
+- A strict internal registry of 13 bounded monitoring tools, with a local tool catalog.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -156,7 +157,8 @@ failures and are not diagnoses of a monitored service.
 10 October 2026 clarification, development can continue with mocked provider
 responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
-database persistence is also implemented; the next phase is the AI tool registry.
+database persistence and the AI tool registry are also implemented; the next phase
+is the actual AI investigation loop.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -533,6 +535,31 @@ inside project `work/`. PostgreSQL tests skip explicitly without the harness.
 
 See `docs/PHASE-7.md` for validation details and limits.
 
+## AI tool registry — Phase 8
+
+`GET /tools` lists 13 fixed function descriptors and their execution policy.
+The internal registry accepts validated JSON arguments and calls the existing
+monitoring adapters. It exposes no shell, SQL, arbitrary URL, incident-write or
+remediation operation. Tool execution has no public HTTP endpoint. Production
+catalog/internal access remains disabled pending deployment access controls.
+
+Calls accept at most 4 KiB of JSON, return at most 64 KiB of canonical JSON, and
+allow one in-flight registry operation. IDs, types, extra fields and pagination
+are checked before I/O. Existing provider deadlines/network policies remain in
+force. A timeout keeps the slot occupied until underlying work finishes.
+Results preserve fixture labels and distinguish dispatch success from service
+health. History failure is reported separately from operational evidence.
+
+```powershell
+.\scripts\tools-smoke.ps1
+```
+
+This runs real Chromium with intercepted fixtures, n8n/infrastructure fixtures,
+and new scratch SQLite history, then verifies the catalog over actual Uvicorn
+HTTP. No provider credentials or model request are needed. The investigation
+loop remains Phase 9. See `docs/PHASE-8.md` for contracts, verification and the
+current PostgreSQL harness limitation.
+
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
 No Dockerfile, frontend, or empty future adapter files are included.
@@ -544,5 +571,5 @@ No Dockerfile, frontend, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-7.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-8.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.
