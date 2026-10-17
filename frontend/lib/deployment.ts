@@ -18,7 +18,13 @@ function origin(value: string | undefined, https: boolean): URL {
 
 export function deployment(environment: Environment = process.env) {
   if (!production(environment)) return null;
-  const publicOrigin = origin(environment.RELIABILITY_PUBLIC_ORIGIN, true).origin;
+  let configuredOrigin = environment.RELIABILITY_PUBLIC_ORIGIN;
+  if (configuredOrigin === undefined && environment.VERCEL === "1" && environment.VERCEL_ENV === "production") {
+    const hostname = environment.VERCEL_PROJECT_PRODUCTION_URL ?? "";
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(hostname)) throw new Error("invalid_platform_origin");
+    configuredOrigin = `https://${hostname}`;
+  }
+  const publicOrigin = origin(configuredOrigin, true).origin;
   const backend = origin(environment.RELIABILITY_BACKEND_URL, true).origin;
   const token = environment.RELIABILITY_BACKEND_TOKEN ?? "";
   const key = environment.RELIABILITY_SESSION_KEY ?? "";

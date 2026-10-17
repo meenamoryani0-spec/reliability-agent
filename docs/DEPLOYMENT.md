@@ -3,8 +3,11 @@
 This is an implementation and rollout guide. On 18 October 2026, the selected
 Supabase session pooler was verified using full TLS validation, application
 migrations reached `0005_verified_recovery`, and the restricted runtime login and
-table privileges passed live verification. Backend/frontend cloud deployment,
-Linux Docker image execution and live monitored-provider validation remain pending.
+table privileges passed live verification. The first Render backend image deploy
+subsequently reported Live and passed public HTTPS readiness, authenticated
+storage/history and rejected-token checks at
+`https://reliability-agent-josr.onrender.com`. Frontend cloud deployment, deployed
+frontend login and live monitored-provider validation remain pending.
 Docker is not installed in the current Windows environment.
 
 ## Topology
@@ -147,6 +150,16 @@ and supply only frontend template variables through server environment settings.
 Runtime instrumentation rejects invalid production origins/keys. Set a stable
 canonical domain matching `RELIABILITY_PUBLIC_ORIGIN`; other hosts cannot open an
 authenticated workspace. Do not reuse production secrets in preview deployments.
+
+When the explicit public origin is omitted on a Vercel production deployment
+(`VERCEL=1`, `VERCEL_ENV=production`), the frontend uses the one exact
+`VERCEL_PROJECT_PRODUCTION_URL` hostname. This fallback accepts only an assigned
+project hostname ending in `.vercel.app`, not a wildcard value or request header.
+System environment variables must be enabled. Explicit origins take precedence;
+custom domains and other hosts require them. Preview deployments do not receive
+this fallback. Keep credentials scoped to Production. The raw operator login key
+stays local; Vercel receives its SHA-256 digest, separate session signing key,
+fixed Render URL and existing backend token. See `VERCEL-ROLLOUT.md`.
 
 The investigation route declares `maxDuration=130` seconds, covering its bounded
 125-second backend fetch. Verify the actual plan, function mode and edge/request

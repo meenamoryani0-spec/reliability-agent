@@ -109,12 +109,24 @@ settings still take precedence; no request/forwarded-header or wildcard fallback
 exists. The image includes the official public Supabase production root CA, used
 only when selected through `STORAGE_SSL_CA_FILE`.
 
-Docker remains unavailable locally, so image builds/Linux execution are unverified.
-Cloud frontend/backend operation, edge configuration and deployed acceptance remain
+Docker remains unavailable locally. Render reported the first backend image build
+and deployment Live at commit `25aaab0`; public HTTPS health/readiness and
+authenticated storage/history passed at `https://reliability-agent-josr.onrender.com`.
+Missing/invalid tokens and browser-origin credentials were rejected. This check
+made only bounded reads, with no provider/model/remediation calls.
+Frontend cloud operation, edge configuration and full deployed acceptance remain
 pending. This is not a completed live Phase 14 deployment. Existing `.env` and
 monitored-provider credentials were not edited; no paid resources were provisioned.
 See `RENDER-ROLLOUT.md` for current live-storage checks, local HTTP acceptance and
 the full-suite timing failure plus successful registry-group rerun.
+
+Vercel production origin discovery is prepared: absent an explicit origin, trusted
+production project metadata supplies one exact assigned `.vercel.app` origin.
+Explicit custom-domain settings retain precedence; previews and request headers
+cannot choose the fallback. All 26 frontend tests, lint, typecheck, production
+build, runtime dependency audit (zero findings) and local verified-TLS auth smoke
+passed. Private frontend keys and their clipboard helper were validated; no login
+key was printed or uploaded. See `VERCEL-ROLLOUT.md` for the hosting boundary.
 
 Remaining roadmap: finish Phase 14 cloud/container acceptance, then Phase 15's
 intentional-failure demo. Stop after committing this locally verified preparation;

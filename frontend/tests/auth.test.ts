@@ -17,8 +17,16 @@ const values = {
   RELIABILITY_SESSION_KEY: "test_only_session_" + "z".repeat(32),
   RELIABILITY_OPERATOR_KEY_SHA256: createHash("sha256").update(operator).digest("hex"),
 };
+const platformValues = {
+  ...values,
+  RELIABILITY_PUBLIC_ORIGIN: undefined,
+  VERCEL: "1",
+  VERCEL_ENV: "production",
+  VERCEL_PROJECT_PRODUCTION_URL: "assigned-project-123.vercel.app",
+};
+const environmentKeys = [...Object.keys(values), "VERCEL", "VERCEL_ENV", "VERCEL_PROJECT_PRODUCTION_URL"];
 beforeEach(() => { Object.assign(process.env, values); });
-afterEach(() => { for (const key of Object.keys(values)) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; } globalThis.fetch = originalFetch; });
+afterEach(() => { for (const key of environmentKeys) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; } globalThis.fetch = originalFetch; });
 const request = (headers: Record<string, string> = {}) => new Request("http://localhost:3000/api/dashboard", { headers: { host: "dashboard.example", ...headers } });
 
 test("production configuration requires fixed HTTPS origins and independent secrets", () => {
@@ -75,4 +83,43 @@ test("per-instance login burst refills slowly", () => {
   assert.equal(allowLogin(now), false);
   assert.equal(allowLogin(now + 59_000), false);
   assert.equal(allowLogin(now + 60_000), true);
+});
+
+test("Vercel production metadata selects one canonical project origin", () => {
+  assert.equal(deployment(platformValues)?.publicOrigin, "https://assigned-project-123.vercel.app");
+});
+
+test("explicit frontend origins take precedence over platform metadata", () => {
+  assert.equal(deployment({ ...platformValues, RELIABILITY_PUBLIC_ORIGIN: values.RELIABILITY_PUBLIC_ORIGIN, VERCEL_PROJECT_PRODUCTION_URL: "invalid" })?.publicOrigin, values.RELIABILITY_PUBLIC_ORIGIN);
+  assert.throws(() => deployment({ ...platformValues, RELIABILITY_PUBLIC_ORIGIN: "" }));
+});
+
+test("platform-origin fallback is unavailable outside a Vercel production deployment", () => {
+  for (const changes of [{ VERCEL: undefined }, { VERCEL: "0" }, { VERCEL_ENV: "preview" }, { VERCEL_ENV: "development" }, { VERCEL_ENV: undefined }]) {
+    assert.throws(() => deployment({ ...platformValues, ...changes }));
+  }
+});
+
+test("malformed or unrelated Vercel metadata fails closed", () => {
+  for (const value of [undefined, "", "https://project.vercel.app", "*.vercel.app", "evil.example", "project.vercel.app.evil.example", "project.vercel.app:443", "PROJECT.vercel.app", "project.vercel.app/path", "project.vercel.app\n"]) {
+    assert.throws(() => deployment({ ...platformValues, VERCEL_PROJECT_PRODUCTION_URL: value }));
+  }
+});
+
+test("Vercel metadata preserves exact Host and Origin checks", () => {
+  Object.assign(process.env, platformValues);
+  delete process.env.RELIABILITY_PUBLIC_ORIGIN;
+  const host = "assigned-project-123.vercel.app";
+  assert.equal(sameOrigin(request({ host, origin: `https://${host}`, "content-type": "application/json" }), true), true);
+  assert.equal(sameOrigin(request({ host: "another.vercel.app", "x-forwarded-host": host })), false);
+  assert.equal(sameOrigin(request({ host, origin: "https://evil.example", "content-type": "application/json" }), true), false);
+});
+
+test("sessions remain bound to the canonical Vercel project origin", () => {
+  Object.assign(process.env, platformValues);
+  delete process.env.RELIABILITY_PUBLIC_ORIGIN;
+  const session = createSession(1000);
+  assert.equal(validSession(session, 1001), true);
+  process.env.VERCEL_PROJECT_PRODUCTION_URL = "different-project.vercel.app";
+  assert.equal(validSession(session, 1001), false);
 });
