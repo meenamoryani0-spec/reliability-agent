@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import inspect, update
@@ -17,7 +16,7 @@ from app.actions.models import RetryAction
 from app.actions.repository import ActionRepository
 from app.actions.service import ActionService
 from app.config import Settings
-from app.db.migrate import HEAD, current_revision, migration_config, upgrade
+from app.db.migrate import HEAD, current_revision, downgrade, upgrade
 from app.db.models import now
 from app.db.repository import StorageError
 from app.db.snapshots import snapshot_for, source_for
@@ -200,8 +199,7 @@ def test_migration_roundtrip_preserves_nonempty_prior_history_and_incident(
     engine, evidence, action_repository
 ):
     prior = action_repository.incident(evidence[0])
-    with engine.begin() as connection:
-        command.downgrade(migration_config(connection), "0003_incident_assessments")
+    downgrade(engine, "0003_incident_assessments")
     schema = "reliability" if engine.dialect.name == "postgresql" else None
     assert "retry_actions" not in inspect(engine).get_table_names(schema=schema)
     upgrade(engine)

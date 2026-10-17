@@ -4,11 +4,10 @@ from threading import Barrier
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from sqlalchemy import MetaData, Table, func, inspect, select, update
 
 from app.db.database import create_storage_engine
-from app.db.migrate import HEAD, current_revision, migration_config, upgrade
+from app.db.migrate import HEAD, current_revision, downgrade, upgrade
 from app.db.models import Incident, IncidentObservation, StoredCheck
 from app.db.repository import HistoryRepository, StorageError
 from app.db.snapshots import Snapshot, snapshot_for
@@ -222,8 +221,7 @@ def test_active_unique_index_and_resolution_guard_are_enforced(repository):
 
 
 def legacy_incidents(engine, check_ids):
-    with engine.begin() as connection:
-        command.downgrade(migration_config(connection), "0001_history")
+    downgrade(engine, "0001_history")
     schema = "reliability" if engine.dialect.name == "postgresql" else None
     legacy = Table("incidents", MetaData(), schema=schema, autoload_with=engine)
     identifiers = []

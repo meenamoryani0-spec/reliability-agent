@@ -3,12 +3,11 @@ from datetime import UTC, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from sqlalchemy import inspect, update
 
 from app.actions.models import RetryAction
 from app.db.database import create_storage_engine
-from app.db.migrate import HEAD, current_revision, migration_config, upgrade
+from app.db.migrate import HEAD, current_revision, downgrade, upgrade
 from app.db.models import (
     Incident,
     IncidentAssessment,
@@ -52,9 +51,8 @@ def test_migration_is_idempotent_and_supports_rollback_then_upgrade(engine):
         "ix_checks_created",
         "ix_checks_service_observed",
     }
-    assert len(inspector.get_foreign_keys("incidents", schema=schema)) == 2
-    with engine.begin() as connection:
-        command.downgrade(migration_config(connection), "base")
+    assert len(inspector.get_foreign_keys("incidents", schema=schema)) == 3
+    downgrade(engine, "base")
     assert current_revision(engine) is None
     upgrade(engine)
     assert current_revision(engine) == HEAD

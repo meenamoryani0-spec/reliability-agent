@@ -141,3 +141,24 @@ async def action(request: Request, action_id: UUID):
     if result is None:
         raise HTTPException(status_code=404, detail="Stored action not found")
     return result
+
+
+@router.get("/recovery")
+async def describe_recovery(request: Request):
+    require_local_access(request)
+    from app.recovery.service import recovery_policy
+
+    return recovery_policy(request.app.state.settings)
+
+
+@router.get("/history/verifications")
+async def verifications(request: Request, limit: Limit = 25, offset: Offset = 0):
+    return await read(request, "verifications", limit=limit, offset=offset)
+
+
+@router.get("/history/verifications/{verification_id}")
+async def verification(request: Request, verification_id: UUID):
+    result = await read(request, "verification", verification_id=verification_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Stored verification not found")
+    return result

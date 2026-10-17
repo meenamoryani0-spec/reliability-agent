@@ -19,6 +19,7 @@ from app.db.models import (
     now,
 )
 from app.db.snapshots import Snapshot
+from app.recovery.models import RecoveryVerification
 
 
 class StorageError(ValueError):
@@ -87,7 +88,12 @@ def incident_dict(row, service, count=0, first=None, last=None):
         "last_observed_at": last,
         "root_cause_verified": False,
         "root_cause": None,
-        "verified": False,
+        "verified": row.status == "RESOLVED",
+        "recovery_verified": row.status == "RESOLVED",
+        "business_outcome_verified": False,
+        "resolution_verification_id": row.resolution_verification_id,
+        "resolution_scope": row.resolution_scope,
+        "resolved_at": row.resolved_at,
     }
 
 
@@ -313,28 +319,53 @@ class HistoryRepository:
             check = session.get(StoredCheck, valid_id(detected_check_id))
             if check is None or check.status != "UNHEALTHY":
                 raise StorageError("incident_requires_unhealthy_evidence")
+            self.lock_service(session, check.service_id)
             linked = session.get(IncidentObservation, check.id)
             created = False
             if linked is not None:
                 identifier = linked.incident_id
             else:
                 insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
-                identifier = session.execute(
-                    insert(Incident)
-                    .values(
-                        service_id=check.service_id,
-                        detected_check_id=check.id,
-                        kind=check.kind,
-                        evidence_status="UNHEALTHY",
-                        status="OPEN",
-                        severity=severity,
+                historical = (
+                    session.scalar(
+                        select(Incident.id)
+                        .join(
+                            RecoveryVerification,
+                            Incident.resolution_verification_id == RecoveryVerification.id,
+                        )
+                        .where(
+                            Incident.service_id == check.service_id,
+                            Incident.kind == check.kind,
+                            Incident.status == "RESOLVED",
+                            RecoveryVerification.original_execution_id
+                            == check.payload.get("evidence", {}).get("id", ""),
+                            RecoveryVerification.workflow_id
+                            == check.payload.get("evidence", {}).get("workflow_id", ""),
+                        )
+                        .limit(1)
                     )
-                    # Same-check races can conflict with detected_check_id before
-                    # the active-key index. Handle either uniqueness constraint.
-                    .on_conflict_do_nothing()
-                    .returning(Incident.id)
-                ).scalar_one_or_none()
-                created = identifier is not None
+                    if check.kind == "execution"
+                    else None
+                )
+                identifier = (
+                    historical
+                    or session.execute(
+                        insert(Incident)
+                        .values(
+                            service_id=check.service_id,
+                            detected_check_id=check.id,
+                            kind=check.kind,
+                            evidence_status="UNHEALTHY",
+                            status="OPEN",
+                            severity=severity,
+                        )
+                        # Same-check races can conflict with detected_check_id before
+                        # the active-key index. Handle either uniqueness constraint.
+                        .on_conflict_do_nothing()
+                        .returning(Incident.id)
+                    ).scalar_one_or_none()
+                )
+                created = identifier is not None and historical is None
                 if identifier is None:
                     identifier = session.scalar(
                         select(Incident.id).where(
@@ -359,6 +390,12 @@ class HistoryRepository:
             row = session.execute(self._incident_query().where(Incident.id == identifier)).one()
             return incident_dict(*row), created
 
+    @staticmethod
+    def lock_service(session, service_id):
+        session.scalar(
+            select(MonitoredService).where(MonitoredService.id == service_id).with_for_update()
+        )
+
     def actions(self, *, limit=25, offset=0):
         from app.actions.repository import ActionRepository
 
@@ -368,3 +405,13 @@ class HistoryRepository:
         from app.actions.repository import ActionRepository
 
         return ActionRepository(self.engine).action(action_id)
+
+    def verifications(self, *, limit=25, offset=0):
+        from app.recovery.repository import RecoveryRepository
+
+        return RecoveryRepository(self.engine).verifications(limit=limit, offset=offset)
+
+    def verification(self, verification_id):
+        from app.recovery.repository import RecoveryRepository
+
+        return RecoveryRepository(self.engine).verification(verification_id)

@@ -1,5 +1,6 @@
 """Programmatic Alembic configuration with no credentials in ini files or logs."""
 
+from contextlib import contextmanager
 from io import StringIO
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from sqlalchemy import text
 
 from app.db.models import SCHEMA
 
-HEAD = "0004_approved_n8n_retry"
+HEAD = "0005_verified_recovery"
 
 
 def migration_config(connection):
@@ -20,11 +21,37 @@ def migration_config(connection):
     return config
 
 
+@contextmanager
+def migration_transaction(engine):
+    # SQLite batch table rebuilds require incoming FKs off on this dedicated
+    # connection only. BEGIN IMMEDIATE excludes concurrent application writers;
+    # verify every FK before committing and restore enforcement on every exit.
+    with engine.connect() as connection:
+        sqlite = connection.dialect.name == "sqlite"
+        raw = connection.connection.driver_connection
+        if sqlite:
+            raw.execute("PRAGMA foreign_keys=OFF")
+            connection = connection.execution_options(sqlite_write=True)
+        try:
+            with connection.begin():
+                yield connection
+                if sqlite and connection.exec_driver_sql("PRAGMA foreign_key_check").first():
+                    raise RuntimeError("Migration foreign-key validation failed")
+        finally:
+            if sqlite:
+                raw.execute("PRAGMA foreign_keys=ON")
+
+
 def upgrade(engine):
-    with engine.begin() as connection:
+    with migration_transaction(engine) as connection:
         if connection.dialect.name == "postgresql":
             connection.execute(text("CREATE SCHEMA IF NOT EXISTS reliability"))
         command.upgrade(migration_config(connection), "head")
+
+
+def downgrade(engine, revision):
+    with migration_transaction(engine) as connection:
+        command.downgrade(migration_config(connection), revision)
 
 
 def current_revision(engine):

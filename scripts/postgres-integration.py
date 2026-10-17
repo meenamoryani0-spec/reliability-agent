@@ -4,9 +4,11 @@ import argparse
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import psycopg
@@ -21,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bin-dir", type=Path, required=True)
     parser.add_argument("--powershell", type=Path, required=True)
+    parser.add_argument("--template-dir", type=Path)
     args = parser.parse_args()
     bins = args.bin_dir.resolve()
     if not bins.is_relative_to((ROOT / "work").resolve()):
@@ -45,26 +48,55 @@ def main():
     }
     started = False
     try:
-        with (directory / "initdb.log").open("w", encoding="utf-8") as output:
-            subprocess.run(
-                [
-                    str(bins / "initdb.exe"),
-                    "-D",
-                    str(data),
-                    "-U",
-                    "ra_test",
-                    "--pwfile=" + str(password_file),
-                    "--auth=scram-sha-256",
-                    "--no-locale",
-                    "--encoding=UTF8",
-                ],
+        if args.template_dir is not None:
+            template = args.template_dir.resolve()
+            if (
+                not template.is_relative_to(workspace.resolve())
+                or template.name != "data"
+                or not template.parent.name.startswith("cluster-")
+                or (template / "postmaster.pid").exists()
+            ):
+                raise RuntimeError("Template must be a stopped disposable project test cluster")
+            control = subprocess.run(
+                [str(bins / "pg_controldata.exe"), str(template)],
                 env=server_env,
-                stdout=output,
-                stderr=subprocess.STDOUT,
-                timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=10,
                 check=True,
                 creationflags=HIDDEN,
             )
+            if not any(
+                "Database cluster state:" in line and line.strip().endswith("shut down")
+                for line in control.stdout.splitlines()
+            ):
+                raise RuntimeError("Template cluster was not cleanly shut down")
+            shutil.copytree(template, data)
+            # Only the new disposable copy is changed; it listens on loopback only.
+            (data / "pg_hba.conf").write_text(
+                "host all ra_test 127.0.0.1/32 trust\n", encoding="utf-8"
+            )
+        else:
+            with (directory / "initdb.log").open("w", encoding="utf-8") as output:
+                subprocess.run(
+                    [
+                        str(bins / "initdb.exe"),
+                        "-D",
+                        str(data),
+                        "-U",
+                        "ra_test",
+                        "--pwfile=" + str(password_file),
+                        "--auth=scram-sha-256",
+                        "--no-locale",
+                        "--encoding=UTF8",
+                    ],
+                    env=server_env,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    timeout=60,
+                    check=True,
+                    creationflags=HIDDEN,
+                )
         password_file.unlink()
         started = True
         subprocess.run(
@@ -75,7 +107,8 @@ def main():
                 "-l",
                 str(directory / "server.log"),
                 "-o",
-                f"-h 127.0.0.1 -p {port}",
+                f"-h 127.0.0.1 -p {port} -c max_connections=20 -c shared_buffers=16MB "
+                "-c log_statement=none -c log_min_error_statement=panic",
                 "-w",
                 "-t",
                 "20",
@@ -101,7 +134,48 @@ def main():
             connect_timeout=5,
             autocommit=True,
         ) as connection:
+            if args.template_dir is not None:
+                try:
+                    connection.execute(
+                        sql.SQL("ALTER ROLE ra_test PASSWORD {}").format(sql.Literal(password))
+                    )
+                except Exception:
+                    raise RuntimeError("Disposable test authentication setup failed") from None
             connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+        if args.template_dir is not None:
+            (data / "pg_hba.conf").write_text(
+                "host all ra_test 127.0.0.1/32 scram-sha-256\n", encoding="utf-8"
+            )
+            subprocess.run(
+                [str(bins / "pg_ctl.exe"), "-D", str(data), "reload"],
+                env=server_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=True,
+                creationflags=HIDDEN,
+            )
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    with psycopg.connect(
+                        host="127.0.0.1",
+                        port=port,
+                        user="ra_test",
+                        password=password,
+                        dbname=database,
+                        sslmode="disable",
+                        gssencmode="disable",
+                        connect_timeout=2,
+                        require_auth="scram-sha-256",
+                    ):
+                        break
+                except psycopg.OperationalError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(
+                            "Disposable SCRAM authentication was not ready"
+                        ) from None
+                    time.sleep(0.1)
         url = URL.create(
             "postgresql+psycopg",
             username="ra_test",
@@ -132,6 +206,7 @@ def main():
             "database": "isolated_local_postgresql",
             "listen_address": "127.0.0.1",
             "cloud_database_accessed": False,
+            "initialization": "verified_shutdown_test_copy" if args.template_dir else "initdb",
         }
         (ROOT / "work" / "evidence").mkdir(parents=True, exist_ok=True)
         (ROOT / "work" / "evidence" / "phase-7-postgresql.json").write_text(

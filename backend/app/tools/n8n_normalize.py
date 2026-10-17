@@ -46,6 +46,12 @@ class ProviderPage(ProviderMetadata):
     nextCursor: Cursor | None
 
 
+class ExecutionLineage(ProviderMetadata):
+    mode: str | None = Field(default=None, max_length=32, pattern=r"^[a-zA-Z]+$")
+    retryOf: ExecutionId | None = None
+    retrySuccessId: ExecutionId | None = None
+
+
 class ErrorMetadata(ProviderMetadata):
     httpCode: str | int | None = None
     node: dict | None = None
@@ -105,6 +111,7 @@ def category(code: int | None) -> str:
 
 def execution_evidence(raw: dict) -> ExecutionEvidence:
     metadata = execution_summary(raw)
+    lineage = ExecutionLineage.model_validate(raw)
     status = {
         "error": CheckStatus.UNHEALTHY,
         "crashed": CheckStatus.UNHEALTHY,
@@ -117,6 +124,9 @@ def execution_evidence(raw: dict) -> ExecutionEvidence:
     }
     result = ExecutionEvidence(
         **metadata.model_dump(),
+        execution_mode=lineage.mode,
+        retry_of=lineage.retryOf,
+        retry_success_id=lineage.retrySuccessId,
         status=status,
         summary=summaries[status],
         data_availability="omitted",
@@ -202,7 +212,7 @@ def execution_evidence(raw: dict) -> ExecutionEvidence:
         ref = node_ref(name)
         if not isinstance(attempts, list) or not 1 <= len(attempts) <= 100:
             raise N8nError("invalid_response")
-        failures = 0
+        failures, successes = 0, 0
         for index, attempt in enumerate(attempts):
             if not isinstance(attempt, dict):
                 raise N8nError("invalid_response")
@@ -215,12 +225,15 @@ def execution_evidence(raw: dict) -> ExecutionEvidence:
             elif attempt.get("executionStatus") == "error":
                 failure({}, name=name, index=index)
                 failures += 1
+            elif attempt.get("executionStatus") == "success":
+                successes += 1
         result.observed_nodes.append(
             NodeObservation(
                 node_ref=ref,
                 node_id=node_ids.get(ref),
                 attempts=len(attempts),
                 failed_attempts=failures,
+                successful_attempts=successes,
             )
         )
     if details.get("error") is not None:

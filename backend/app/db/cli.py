@@ -24,7 +24,7 @@ def main():
         revision = current_revision(engine)
         print("READY: " + HEAD if revision == HEAD else "MIGRATION_REQUIRED")
         return 0 if revision == HEAD else 1
-    except (ValueError, SQLAlchemyError):
+    except (ValueError, RuntimeError, SQLAlchemyError):
         print("NOT_VERIFIED: application database operation failed")
         return 1
     finally:

@@ -10,6 +10,7 @@ from app.actions.models import RetryAction
 from app.db.models import Incident, IncidentObservation, MonitoredService, StoredCheck, now
 from app.db.repository import HistoryRepository, StorageError, page_bounds, valid_id
 from app.db.snapshots import Snapshot
+from app.recovery.models import RecoveryVerification
 from app.tools.n8n_models import ExecutionId, ResourceId
 from app.tools.n8n_normalize import ProviderMetadata
 
@@ -23,7 +24,7 @@ class StoredExecution(ProviderMetadata):
     data_availability: str
 
 
-def action_dict(row, link, service):
+def action_dict(row, link, service, proof=None):
     return {
         "id": row.id,
         "action": "retry_n8n_execution",
@@ -46,7 +47,9 @@ def action_dict(row, link, service):
         "reason": row.reason,
         "approval_method": "local_operator_duplicate_effects_ack" if row.approved_at else None,
         "load_workflow": False,
-        "recovery_verified": False,
+        "recovery_verified": proof is not None,
+        "resolution_verification_id": proof.id if proof else None,
+        "resolution_scope": "n8n_required_nodes" if proof else None,
         "business_outcome_verified": False,
         "risk": "Retry may repeat external side effects, including messages or payments.",
     }
@@ -56,9 +59,15 @@ class ActionRepository(HistoryRepository):
     @staticmethod
     def _query():
         return (
-            select(RetryAction, IncidentObservation, MonitoredService)
+            select(RetryAction, IncidentObservation, MonitoredService, RecoveryVerification)
             .join(IncidentObservation, RetryAction.check_id == IncidentObservation.check_id)
             .join(MonitoredService, IncidentObservation.service_id == MonitoredService.id)
+            .join(Incident, IncidentObservation.incident_id == Incident.id)
+            .outerjoin(
+                RecoveryVerification,
+                (Incident.resolution_verification_id == RecoveryVerification.id)
+                & (RecoveryVerification.action_id == RetryAction.id),
+            )
         )
 
     def actions(self, *, limit=25, offset=0):

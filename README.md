@@ -20,6 +20,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - A bounded model/tool investigation loop with validated evidence-linked conclusions.
 - Opt-in automatic incidents from persisted unhealthy checks, with deduplication and evidence links.
 - A separately approved, one-shot n8n execution retry with a durable audit and operator CLI.
+- Separate recovery verification with durable node evidence before scoped incident resolution.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -460,8 +461,8 @@ tables, models, migrations or arbitrary queries were added. See `docs/PHASE-6.md
 
 Application storage is separate from the monitored `POSTGRES_*` database.
 It stores monitored service identities, check results, and the initial incident
-records. Phase 10 adds opt-in automatic detection, described below; resolution
-remains blocked until verified recovery exists.
+records. Phase 10 adds opt-in automatic detection; Phase 12 adds scoped
+resolution only after successful verification, described below.
 
 On this computer local history is enabled in the ignored `.env`, with the
 database at `work/data/reliability.sqlite3` on D:. On a fresh checkout, configure:
@@ -483,7 +484,8 @@ routes never apply migrations. Migration `0001_history` creates only application
 tables: `monitored_services`, `checks`, and `incidents`. Migration
 `0002_incident_detection` adds evidence links/deduplication;
 `0003_incident_assessments` stores supported diagnoses/recommendations. Current
-head `0004_approved_n8n_retry` adds the one-shot approval/dispatch audit. PostgreSQL uses the
+`0004_approved_n8n_retry` adds approval/dispatch audit; current head
+`0005_verified_recovery` adds guarded verification/resolution. PostgreSQL uses the
 separate `reliability` schema; SQLite uses the configured local file. Existing
 customer/provider tables are never used for application history.
 
@@ -515,8 +517,8 @@ fingerprints are not an anonymity guarantee. Timestamps round-trip as UTC.
 The repository uses per-operation sessions/transactions, parameterized SQL,
 foreign keys, indexes and conflict-safe first registration. Failed transactions
 roll back. Incident records reference a specific unhealthy check on the same
-service. Initial statuses are OPEN/INVESTIGATING; the database rejects RESOLVED.
-Recovery-linked resolution will require a later migration and verified workflow.
+service. Incidents start OPEN/INVESTIGATING; Phase 12 permits RESOLVED only
+with a stored VERIFIED proof and healthy evidence on the same service.
 
 For the dedicated PostgreSQL application database:
 
@@ -649,8 +651,8 @@ Bounded reads include `GET /history/incidents/{id}` and
 `GET /history/incidents/{id}/observations?limit=25&offset=0` and
 `GET /history/incidents/{id}/assessments`; incident lists also
 support `synthetic=true|false`. No incident create/update/resolve HTTP route,
-background polling scheduler, automatic reconciliation or recovery workflow exists.
-Phase 11 adds the separate operator-approved retry described below. Existing
+background polling scheduler or automatic reconciliation exists. Phase 12 adds
+a separate operator verification CLI. Phase 11 adds the approved retry below. Existing
 development `.env` settings remain unchanged.
 A validated investigation conclusion stores an assessment only for cited,
 supporting checks linked to an incident. Assessments contain the finite hypothesis,
@@ -689,7 +691,7 @@ uncertain submission remains blocked across restart; external operators and
 provider side effects are outside this local deduplication guarantee.
 
 A validated new-execution receipt means ACCEPTED, not recovered. Incidents remain
-OPEN/INVESTIGATING. If audit storage fails, operational evidence and the consumed
+OPEN/INVESTIGATING until separate Phase 12 verification succeeds. If audit storage fails, operational evidence and the consumed
 intent are preserved, with uncertainty reported separately. The local CLI trust
 boundary is not a production authorization system. Production retry is disabled.
 
@@ -712,5 +714,43 @@ migration details, outcomes and limits. Live retry remains unverified.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-11.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-12.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.
+
+## Phase 12 — verify an accepted retry
+
+Recovery is off by default. Read [the Phase 12 report](docs/PHASE-12.md) before
+enabling it. In a local development/test environment with migrated storage,
+set `N8N_RECOVERY_MODE` to the matching n8n `fixture` or `live` mode and configure
+`N8N_RECOVERY_FLOWS` as a JSON mapping, for example:
+
+```json
+{"wf-booking":{"required_node_ids":["trigger","crm","confirmation"],"completion_node_id":"confirmation"}}
+```
+
+Use actual stable workflow/node IDs for a real target. The path must contain
+the original failed node(s) and a later completion node. Then, from `backend/`
+with the project environment active:
+
+```powershell
+python -m app.recovery.cli verify --action-id ACCEPTED_ACTION_UUID
+```
+
+One bounded read inspects that action's exact new execution. It does not resend
+the retry. Only fresh, complete success evidence at all required nodes can store
+proof and resolve the incident in one transaction. Running, failed, unavailable,
+stale or incomplete evidence leaves it unresolved. Repeat the command manually
+if an earlier read found it still running. A successful repeat after resolution
+returns the historical proof and identifies it as reused.
+
+`GET /recovery` describes policy. `GET /history/verifications` and
+`GET /history/verifications/{UUID}` read stored attempts. No HTTP/model verification
+write path exists. Resolution is scoped to `n8n_required_nodes`; business delivery
+and root cause remain unverified. Live integration still needs provider validation.
+
+Migration `0005_verified_recovery` preserves old rows and adds proof guards.
+Back up local storage before the explicit migration command. Downgrade refuses
+to discard recovery history. Startup does not migrate. The PostgreSQL test harness
+also accepts `-TemplateDir` pointing to a verified, cleanly stopped project-only
+`work/postgres-tests/cluster-*/data` directory; it copies it, creates a new scratch
+database, establishes fresh SCRAM authentication and stops only its own copy.

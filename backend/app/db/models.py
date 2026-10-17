@@ -87,7 +87,28 @@ class Incident(Base):
             [f"{SCHEMA}.checks.id", f"{SCHEMA}.checks.service_id"],
             ondelete="RESTRICT",
         ),
-        CheckConstraint("status IN ('OPEN','INVESTIGATING')", name="incident_unresolved_only"),
+        # A successful same-incident verification is required at the database boundary.
+        ForeignKeyConstraint(
+            ["resolution_verification_id", "id", "resolution_result"],
+            [
+                f"{SCHEMA}.recovery_verifications.id",
+                f"{SCHEMA}.recovery_verifications.incident_id",
+                f"{SCHEMA}.recovery_verifications.result",
+            ],
+            name="incident_resolution_proof",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        CheckConstraint(
+            "(status IN ('OPEN','INVESTIGATING') AND resolution_verification_id IS NULL "
+            "AND resolution_result IS NULL AND resolved_at IS NULL "
+            "AND resolution_scope IS NULL) OR "
+            "(status = 'RESOLVED' AND resolution_verification_id IS NOT NULL "
+            "AND resolution_result IS NOT NULL AND resolution_result = 'VERIFIED' "
+            "AND resolved_at IS NOT NULL AND resolution_scope IS NOT NULL "
+            "AND resolution_scope = 'n8n_required_nodes')",
+            name="incident_resolution_required",
+        ),
         CheckConstraint("severity IN ('warning','high')", name="incident_severity"),
         UniqueConstraint("detected_check_id", name="incident_detection_once"),
         ForeignKeyConstraint(
@@ -123,7 +144,10 @@ class Incident(Base):
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
     severity: Mapped[str] = mapped_column(String(10), default="high")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=now)
-    # Resolution and diagnosis fields are added with their verified workflows in later phases.
+    resolution_verification_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    resolution_result: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    resolution_scope: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class IncidentObservation(Base):

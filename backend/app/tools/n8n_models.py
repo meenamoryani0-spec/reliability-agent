@@ -45,6 +45,7 @@ class NodeObservation(SafeModel):
     node_id: ResourceId | None = None
     attempts: int
     failed_attempts: int
+    successful_attempts: int = 0
 
 
 class NodeFailure(SafeModel):
@@ -65,6 +66,9 @@ class NodeFailure(SafeModel):
 
 
 class ExecutionEvidence(ExecutionSummary):
+    execution_mode: str | None = Field(default=None, max_length=32, pattern=r"^[a-zA-Z]+$")
+    retry_of: ExecutionId | None = None
+    retry_success_id: ExecutionId | None = None
     status: CheckStatus
     summary: str
     data_availability: Literal["present", "omitted", "redacted", "oversized"]

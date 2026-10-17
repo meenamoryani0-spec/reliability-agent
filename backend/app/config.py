@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.recovery.contracts import FlowPolicy
 from app.tools.infrastructure_models import (
     DatabaseName,
     DeploymentId,
@@ -12,7 +13,7 @@ from app.tools.infrastructure_models import (
     validate_database_host,
 )
 from app.tools.models import WebsiteTarget
-from app.tools.n8n_models import validate_n8n_url
+from app.tools.n8n_models import ResourceId, validate_n8n_url
 from app.tools.targets import validate_addresses
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
     n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
     n8n_retry_mode: Literal["disabled", "fixture", "live"] = "disabled"
     n8n_retry_workflow_ids: list[str] = Field(default_factory=list, max_length=25)
+    n8n_recovery_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    n8n_recovery_flows: dict[ResourceId, FlowPolicy] = Field(default_factory=dict, max_length=25)
     n8n_base_url: str | None = Field(default=None, max_length=2048)
     n8n_api_key: SecretStr | None = Field(default=None, repr=False)
     n8n_timeout_seconds: float = Field(default=10, ge=1, le=30)
@@ -148,6 +151,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_target_ids(self) -> "Settings":
+        if self.n8n_recovery_mode != "disabled":
+            if (
+                self.environment == "production"
+                or self.storage_mode == "disabled"
+                or self.n8n_mode != self.n8n_recovery_mode
+                or not self.n8n_recovery_flows
+            ):
+                raise ValueError("Recovery requires local access, storage and matching n8n flows")
+            if self.n8n_recovery_mode == "live" and not (self.n8n_base_url and self.n8n_api_key):
+                raise ValueError("Live recovery requires explicit n8n configuration")
         if self.n8n_retry_mode != "disabled":
             if (
                 self.environment == "production"
