@@ -115,3 +115,11 @@ Official framework references checked during implementation:
 [installation](https://nextjs.org/docs/app/getting-started/installation),
 [route handlers](https://nextjs.org/docs/app/getting-started/route-handlers),
 [fetch caching](https://nextjs.org/docs/app/api-reference/functions/fetch).
+
+## Product homepage and dashboard
+
+The root `/` is the product introduction: charcoal/green visual identity,
+interactive illustrative workflow, product explanation, operating boundaries and
+links to the application. `/dashboard` is the operational workspace. Both share
+the same palette. The homepage makes no provider requests; its stage controls
+only explain the example and never execute checks or actions.

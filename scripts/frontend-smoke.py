@@ -65,7 +65,7 @@ def main():
                         require(frontend.post(path).status_code == 404, "Unexpected write route")
                     page = browser.new_page(viewport={"width": 1536, "height": 1080})
                     page.on("pageerror", lambda error: errors.append(str(error)))
-                    page.goto(str(frontend.base_url))
+                    page.goto(str(frontend.base_url) + "/dashboard")
                     expect(page.get_by_role("heading", name="Reliability overview")).to_be_visible()
                     expect(page.get_by_text("One incident needs a closer look.")).to_be_visible()
                     no_overflow(page)
@@ -164,7 +164,7 @@ def main():
                 with frontend_server(backend.base_url, name="frontend-empty") as frontend:
                     page = browser.new_page(viewport={"width": 1280, "height": 900})
                     page.on("pageerror", lambda error: errors.append(str(error)))
-                    page.goto(str(frontend.base_url))
+                    page.goto(str(frontend.base_url) + "/dashboard")
                     expect(page.get_by_text("Ready for your first signal.")).to_be_visible()
                     expect(
                         page.get_by_role("button", name="Investigate", exact=True)
@@ -175,7 +175,7 @@ def main():
             with server(disabled_environment, logs / "frontend-disabled-backend.log") as backend:
                 with frontend_server(backend.base_url, name="frontend-disabled") as frontend:
                     page = browser.new_page(viewport={"width": 1280, "height": 900})
-                    page.goto(str(frontend.base_url))
+                    page.goto(str(frontend.base_url) + "/dashboard")
                     expect(
                         page.get_by_text("Some history is unavailable.", exact=False)
                     ).to_be_visible()
@@ -184,7 +184,7 @@ def main():
                     page.close()
             with frontend_server("http://127.0.0.1:1", name="frontend-offline") as frontend:
                 page = browser.new_page(viewport={"width": 1280, "height": 900})
-                page.goto(str(frontend.base_url))
+                page.goto(str(frontend.base_url) + "/dashboard")
                 expect(
                     page.get_by_text("Backend connection unavailable.", exact=False)
                 ).to_be_visible()
