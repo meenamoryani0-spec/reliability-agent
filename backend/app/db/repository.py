@@ -358,3 +358,13 @@ class HistoryRepository:
                 )
             row = session.execute(self._incident_query().where(Incident.id == identifier)).one()
             return incident_dict(*row), created
+
+    def actions(self, *, limit=25, offset=0):
+        from app.actions.repository import ActionRepository
+
+        return ActionRepository(self.engine).actions(limit=limit, offset=offset)
+
+    def action(self, action_id):
+        from app.actions.repository import ActionRepository
+
+        return ActionRepository(self.engine).action(action_id)

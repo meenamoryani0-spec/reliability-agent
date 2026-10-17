@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from app.db.models import SCHEMA
 
-HEAD = "0003_incident_assessments"
+HEAD = "0004_approved_n8n_retry"
 
 
 def migration_config(connection):

@@ -24,6 +24,8 @@ async def main():
         _env_file=None,
         environment="test",
         incidents_enabled=False,
+        n8n_retry_mode="disabled",
+        n8n_retry_workflow_ids=[],
         website_targets=[],
         n8n_mode="fixture",
         infrastructure_mode="fixture",

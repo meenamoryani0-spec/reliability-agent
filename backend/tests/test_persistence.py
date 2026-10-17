@@ -6,6 +6,7 @@ import pytest
 from alembic import command
 from sqlalchemy import inspect, update
 
+from app.actions.models import RetryAction
 from app.db.database import create_storage_engine
 from app.db.migrate import HEAD, current_revision, migration_config, upgrade
 from app.db.models import (
@@ -44,6 +45,7 @@ def test_migration_is_idempotent_and_supports_rollback_then_upgrade(engine):
         "incidents",
         "incident_observations",
         "incident_assessments",
+        "retry_actions",
         "ra_schema_version",
     } <= set(inspector.get_table_names(schema=schema))
     assert {row["name"] for row in inspector.get_indexes("checks", schema=schema)} >= {
@@ -61,7 +63,14 @@ def test_migration_is_idempotent_and_supports_rollback_then_upgrade(engine):
 def test_schema_and_orm_columns_match(engine):
     schema = "reliability" if engine.dialect.name == "postgresql" else None
     inspector = inspect(engine)
-    for model in (MonitoredService, StoredCheck, Incident, IncidentObservation, IncidentAssessment):
+    for model in (
+        MonitoredService,
+        StoredCheck,
+        Incident,
+        IncidentObservation,
+        IncidentAssessment,
+        RetryAction,
+    ):
         assert {
             column["name"] for column in inspector.get_columns(model.__tablename__, schema=schema)
         } == set(model.__table__.columns.keys())

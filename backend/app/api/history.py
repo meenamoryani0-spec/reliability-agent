@@ -120,3 +120,24 @@ async def incident_assessments(
     return await read(
         request, "incident_assessments", incident_id=incident_id, limit=limit, offset=offset
     )
+
+
+@router.get("/actions")
+async def describe_actions(request: Request):
+    require_local_access(request)
+    from app.actions.service import action_policy
+
+    return action_policy(request.app.state.settings)
+
+
+@router.get("/history/actions")
+async def actions(request: Request, limit: Limit = 25, offset: Offset = 0):
+    return await read(request, "actions", limit=limit, offset=offset)
+
+
+@router.get("/history/actions/{action_id}")
+async def action(request: Request, action_id: UUID):
+    result = await read(request, "action", action_id=action_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Stored action not found")
+    return result

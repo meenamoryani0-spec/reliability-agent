@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
     website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
     n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    n8n_retry_mode: Literal["disabled", "fixture", "live"] = "disabled"
+    n8n_retry_workflow_ids: list[str] = Field(default_factory=list, max_length=25)
     n8n_base_url: str | None = Field(default=None, max_length=2048)
     n8n_api_key: SecretStr | None = Field(default=None, repr=False)
     n8n_timeout_seconds: float = Field(default=10, ge=1, le=30)
@@ -132,8 +134,32 @@ class Settings(BaseSettings):
     def validate_nameservers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(validate_addresses(list(value))) if value else ()
 
+    @field_validator("n8n_retry_workflow_ids")
+    @classmethod
+    def validate_retry_allowlist(cls, value):
+        from pydantic import TypeAdapter
+
+        from app.tools.n8n_models import ResourceId
+
+        identifiers = [TypeAdapter(ResourceId).validate_python(item) for item in value]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("Retry workflow IDs must be unique")
+        return identifiers
+
     @model_validator(mode="after")
     def validate_target_ids(self) -> "Settings":
+        if self.n8n_retry_mode != "disabled":
+            if (
+                self.environment == "production"
+                or self.storage_mode == "disabled"
+                or self.n8n_mode != self.n8n_retry_mode
+                or not self.n8n_retry_workflow_ids
+            ):
+                raise ValueError(
+                    "Retry requires local access, storage and matching allowlisted n8n mode"
+                )
+            if self.n8n_retry_mode == "live" and not (self.n8n_base_url and self.n8n_api_key):
+                raise ValueError("Live retry requires explicit n8n configuration")
         if self.environment == "production" and self.incidents_enabled:
             raise ValueError("Automatic incidents require deployment access controls")
         if len({target.id for target in self.website_targets}) != len(self.website_targets):

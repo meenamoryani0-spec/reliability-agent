@@ -21,6 +21,8 @@ with socket.socket() as reserved_socket:
 server_environment = {
     **os.environ,
     "ENVIRONMENT": "test",
+    "N8N_RETRY_MODE": "disabled",
+    "N8N_RETRY_WORKFLOW_IDS": "[]",
     "LOG_LEVEL": "INFO",
     "INCIDENTS_ENABLED": "false",
     "INVESTIGATION_MODE": "fixture" if "--agent" in sys.argv else "disabled",

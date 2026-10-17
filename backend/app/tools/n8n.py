@@ -53,7 +53,16 @@ class N8nClient:
         )
 
     async def _get(self, path: str, params: dict[str, str]) -> dict:
-        if not re.fullmatch(r"workflows|executions(?:/[1-9][0-9]{0,18})?", path):
+        return await self._request("GET", path, params)
+
+    async def _request(self, method: str, path: str, params: dict[str, str]) -> dict:
+        read = method == "GET" and re.fullmatch(r"workflows|executions(?:/[1-9][0-9]{0,18})?", path)
+        retry = (
+            method == "POST"
+            and re.fullmatch(r"executions/[1-9][0-9]{0,18}/retry", path)
+            and not params
+        )
+        if not (read or retry):
             raise N8nError("invalid_request")
         try:
             async with asyncio.timeout(self._timeout):
@@ -70,7 +79,10 @@ class N8nClient:
                     },
                 ) as client:
                     async with client.stream(
-                        "GET", self._base.join(path), params=params
+                        method,
+                        self._base.join(path),
+                        params=params,
+                        **({"json": {"loadWorkflow": False}} if retry else {}),
                     ) as response:
                         if response.status_code != 200:
                             code = {

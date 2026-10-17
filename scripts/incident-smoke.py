@@ -18,6 +18,8 @@ def main():
     environment = {
         **os.environ,
         "ENVIRONMENT": "test",
+        "N8N_RETRY_MODE": "disabled",
+        "N8N_RETRY_WORKFLOW_IDS": "[]",
         "LOG_LEVEL": "INFO",
         "STORAGE_MODE": "local",
         "STORAGE_SQLITE_FILE": f"work/data/incident-smoke-{uuid4().hex}.sqlite3",

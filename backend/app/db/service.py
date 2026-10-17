@@ -96,6 +96,8 @@ class HistoryService:
             "incident",
             "incident_observations",
             "incident_assessments",
+            "actions",
+            "action",
         }:
             raise ValueError("Unsupported history operation")
         if not await asyncio.to_thread(self.verify):

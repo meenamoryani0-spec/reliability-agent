@@ -525,7 +525,11 @@ def test_uncertain_storage_does_not_claim_incident_detection_is_inapplicable(
             )
         ).state.tool_registry
         registry._history = Mock(capture=capture)
-        short_deadline(registry, tool)
+        # Allow the real fixture adapter to reach storage on a loaded Windows
+        # runner. The event keeps storage blocked deterministically thereafter.
+        specs = dict(registry._specs)
+        specs[tool] = replace(specs[tool], timeout_seconds=1)
+        registry._specs = MappingProxyType(specs)
         try:
             result = await registry.execute(tool, arguments)
             assert result.status == "OK" and result.history.status == "unavailable"

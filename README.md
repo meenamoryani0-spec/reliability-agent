@@ -19,6 +19,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - A strict internal registry of 13 bounded monitoring tools, with a local tool catalog.
 - A bounded model/tool investigation loop with validated evidence-linked conclusions.
 - Opt-in automatic incidents from persisted unhealthy checks, with deduplication and evidence links.
+- A separately approved, one-shot n8n execution retry with a durable audit and operator CLI.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -160,7 +161,8 @@ failures and are not diagnoses of a monitored service.
 responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
 database persistence, the AI tool registry and the investigation loop are also
-implemented, including opt-in automatic incident creation. Approved remediation is next.
+implemented, including opt-in incidents and the first approved n8n retry action.
+Recovery verification is next.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -478,9 +480,10 @@ Then run the explicit migration and backend:
 
 `migrate.ps1 -Action status` checks revision without upgrading. Startup and HTTP
 routes never apply migrations. Migration `0001_history` creates only application
-tables: `monitored_services`, `checks`, and `incidents`. Current head
-`0002_incident_detection` adds evidence links/deduplication; head
-`0003_incident_assessments` stores supported diagnoses and recommendations. PostgreSQL uses the
+tables: `monitored_services`, `checks`, and `incidents`. Migration
+`0002_incident_detection` adds evidence links/deduplication;
+`0003_incident_assessments` stores supported diagnoses/recommendations. Current
+head `0004_approved_n8n_retry` adds the one-shot approval/dispatch audit. PostgreSQL uses the
 separate `reliability` schema; SQLite uses the configured local file. Existing
 customer/provider tables are never used for application history.
 
@@ -646,8 +649,9 @@ Bounded reads include `GET /history/incidents/{id}` and
 `GET /history/incidents/{id}/observations?limit=25&offset=0` and
 `GET /history/incidents/{id}/assessments`; incident lists also
 support `synthetic=true|false`. No incident create/update/resolve HTTP route,
-background polling scheduler, replay/reconciliation, remediation or recovery
-workflow is added. Existing development `.env` settings remain unchanged.
+background polling scheduler, automatic reconciliation or recovery workflow exists.
+Phase 11 adds the separate operator-approved retry described below. Existing
+development `.env` settings remain unchanged.
 A validated investigation conclusion stores an assessment only for cited,
 supporting checks linked to an incident. Assessments contain the finite hypothesis,
 recommended next steps, actual inference source, timestamp and supporting check
@@ -658,6 +662,49 @@ survive even if a caller deadline expires before confirmation. Replay preserves
 an existing assessment for the same check. No numeric confidence is invented.
 See `docs/PHASE-10.md` for migration safeguards, evidence and limitations.
 
+## Approved n8n retry — Phase 11
+
+The first write action, `retry_n8n_execution(execution_id)`, runs through a
+**local operator CLI**, separate from the AI registry and HTTP monitoring routes.
+It defaults off. Explicit enablement requires migrated application storage,
+matching monitoring/retry modes and a nonempty workflow allowlist:
+
+```dotenv
+N8N_RETRY_MODE=disabled
+N8N_RETRY_WORKFLOW_IDS=[]
+```
+
+The operator first creates/reviews a proposal bound to an unhealthy n8n check and
+its unresolved incident, then approves the exact action ID with
+`--approve-retry-side-effects`. The warning matters: retry can repeat messages,
+payments or other external effects. Approval expires within five minutes of
+observation capture. Source/mode/workflow eligibility and expiry are rechecked.
+A fresh provider read must still show the same original failed execution.
+
+Approval and dispatch intent commit before the fixed POST. The body is always
+`{"loadWorkflow":false}`; no arbitrary workflow, URL or action is accepted.
+Atomic claims and a unique source/execution key prevent duplicate dispatches
+through the shared application database. There is no automatic retry. An
+uncertain submission remains blocked across restart; external operators and
+provider side effects are outside this local deduplication guarantee.
+
+A validated new-execution receipt means ACCEPTED, not recovered. Incidents remain
+OPEN/INVESTIGATING. If audit storage fails, operational evidence and the consumed
+intent are preserved, with uncertainty reported separately. The local CLI trust
+boundary is not a production authorization system. Production retry is disabled.
+
+```powershell
+.\scripts\retry-smoke.ps1
+```
+
+This exercises real CLI/Uvicorn processes with a synthetic in-memory n8n provider,
+including omitted approval, an accepted retry, duplicate blocking and restart
+persistence. No live workflow is executed. `GET /actions` describes policy;
+`GET /history/actions` and `/history/actions/{UUID}` expose bounded audit reads.
+No HTTP approval/execution route or model retry tool is added; the 13 monitoring
+tools remain read-only. See `docs/PHASE-11.md` for operator commands, policy,
+migration details, outcomes and limits. Live retry remains unverified.
+
 ## Documentation checked for Phase 1
 
 - [FastAPI first steps](https://fastapi.tiangolo.com/tutorial/first-steps/)
@@ -665,5 +712,5 @@ See `docs/PHASE-10.md` for migration safeguards, evidence and limitations.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-10.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-11.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.
