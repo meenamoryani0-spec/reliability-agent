@@ -40,6 +40,10 @@ server_environment = {
     "POSTGRES_DBNAME": "",
     "POSTGRES_USER": "",
     "POSTGRES_PASSWORD": "",
+    "STORAGE_MODE": "disabled",
+    "STORAGE_SQLITE_FILE": "work/data/reliability.sqlite3",
+    "STORAGE_DATABASE_URL": "",
+    "STORAGE_ALLOW_LOOPBACK": "false",
 }
 with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_log:
     server = subprocess.Popen(

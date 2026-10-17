@@ -61,6 +61,26 @@ class Settings(BaseSettings):
     postgres_dbname: DatabaseName | None = None
     postgres_user: DatabaseName | None = None
     postgres_password: SecretStr | None = Field(default=None, repr=False)
+    storage_mode: Literal["disabled", "local", "postgresql"] = "disabled"
+    storage_sqlite_file: str = "work/data/reliability.sqlite3"
+    storage_database_url: SecretStr | None = Field(default=None, repr=False)
+    storage_allow_loopback: bool = False
+
+    @field_validator("storage_database_url", mode="before")
+    @classmethod
+    def empty_storage_url(cls, value):
+        return None if value == "" else value
+
+    @field_validator("storage_sqlite_file")
+    @classmethod
+    def local_database_path(cls, value):
+        path = Path(value)
+        if path.is_absolute() or path.suffix != ".sqlite3":
+            raise ValueError("Local database must be a project work/*.sqlite3 path")
+        resolved = (PROJECT_ROOT / path).resolve()
+        if not resolved.is_relative_to((PROJECT_ROOT / "work").resolve()):
+            raise ValueError("Local database must stay inside project work/")
+        return value
 
     @field_validator("postgres_port", mode="before")
     @classmethod
@@ -118,6 +138,39 @@ class Settings(BaseSettings):
             raise ValueError("Synthetic n8n mode is disabled in production")
         if self.environment == "production" and self.infrastructure_mode == "fixture":
             raise ValueError("Synthetic infrastructure mode is disabled in production")
+        if self.environment == "production" and (
+            self.storage_mode == "local" or self.storage_allow_loopback
+        ):
+            raise ValueError("Local persistence settings are disabled in production")
+        if self.storage_mode == "postgresql":
+            from pydantic import TypeAdapter
+            from sqlalchemy.engine import make_url
+            from sqlalchemy.exc import ArgumentError
+
+            if self.storage_database_url is None:
+                raise ValueError("PostgreSQL application storage requires configuration")
+            try:
+                url = make_url(self.storage_database_url.get_secret_value())
+                if (
+                    url.drivername != "postgresql+psycopg"
+                    or not url.host
+                    or not url.database
+                    or not url.username
+                    or not url.password
+                    or url.query
+                ):
+                    raise ValueError()
+                TypeAdapter(DatabaseName).validate_python(url.database)
+                TypeAdapter(DatabaseName).validate_python(url.username)
+                if "\0" in url.password or len(url.password) > 1024:
+                    raise ValueError()
+                if url.host in {"127.0.0.1", "localhost"}:
+                    if not self.storage_allow_loopback:
+                        raise ValueError()
+                else:
+                    validate_database_host(url.host)
+            except (ValueError, TypeError, ArgumentError):
+                raise ValueError("Application database URL is invalid") from None
         return self
 
     @field_validator(

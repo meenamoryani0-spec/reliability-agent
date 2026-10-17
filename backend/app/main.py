@@ -7,9 +7,11 @@ from fastapi import FastAPI
 from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
+from app.api.history import router as history_router
 from app.api.infrastructure import router as infrastructure_router
 from app.api.n8n import router as n8n_router
 from app.config import Settings
+from app.db.service import HistoryService
 from app.logging import configure_logging
 from app.tools.browser import BrowserChecker
 from app.tools.infrastructure import InfrastructureService
@@ -29,13 +31,17 @@ def create_app(
     infrastructure_service: InfrastructureService | None = None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
+    history = HistoryService(config)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         configure_logging(config.log_level)
         logger.info("Backend started (environment=%s)", config.environment)
-        yield
-        logger.info("Backend stopped")
+        try:
+            yield
+        finally:
+            await history.close()
+            logger.info("Backend stopped")
 
     application = FastAPI(
         title="AI Reliability Agent",
@@ -47,6 +53,7 @@ def create_app(
         openapi_url=None if config.environment == "production" else "/openapi.json",
     )
     application.state.settings = config
+    application.state.history = history
     application.state.website_targets = {target.id: target for target in config.website_targets}
     application.state.website_checker = website_checker or WebsiteChecker(
         nameservers=config.website_dns_nameservers
@@ -71,6 +78,7 @@ def create_app(
     application.include_router(browser_router)
     application.include_router(n8n_router)
     application.include_router(infrastructure_router)
+    application.include_router(history_router)
     return application
 
 

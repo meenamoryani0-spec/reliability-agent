@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.api.history import capture_history
 from app.tools.browser_models import FLOW_IDS, BrowserFlowResult
 
 router = APIRouter(tags=["synthetic browser checks"])
@@ -17,8 +18,11 @@ async def list_browser_flows(request: Request) -> list[dict]:
 
 
 @router.post("/checks/browser-flows/{flow_id}", response_model=BrowserFlowResult)
-async def check_browser_flow(flow_id: str, request: Request) -> BrowserFlowResult:
+async def check_browser_flow(
+    flow_id: str, request: Request, response: Response
+) -> BrowserFlowResult:
     require_development(request)
     if flow_id not in FLOW_IDS:
         raise HTTPException(status_code=404, detail="Browser flow is not configured")
-    return await request.app.state.browser_checker.check(flow_id)
+    result = await request.app.state.browser_checker.check(flow_id)
+    return await capture_history(request, response, result, "synthetic-browser-v1")

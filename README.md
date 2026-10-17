@@ -15,6 +15,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Playwright/Chromium synthetic booking flows with UI verification and frontend error counts.
 - Read-only n8n workflow/execution inspection with sanitized node error evidence and local fixtures.
 - Read-only Vercel deployment/events, Supabase project/service-health, and PostgreSQL probes.
+- Application history storage, explicit Alembic migrations, and service/check/incident repositories.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -22,9 +23,10 @@ is implemented and mock-tested; its real connectivity test still needs an API
 key. Website checks pass local fixtures and a public `example.com` smoke check.
 The n8n adapter passes fixture/mock tests; real n8n connectivity remains unverified.
 Infrastructure adapters pass mocks/fixtures; live Vercel, Supabase and PostgreSQL
-connections remain unverified. PostgreSQL has a fixed connectivity probe;
-persistent application models/migrations are Phase 7. No provider credentials
-are required to start the backend or run the automated tests.
+connections remain unverified. Application history supports a local SQLite file
+and a separate PostgreSQL application database. Migrations and persistence are
+tested on both engines, including a real isolated PostgreSQL server. No cloud
+credentials are required for local development.
 
 ## Layout on this computer
 
@@ -154,7 +156,7 @@ failures and are not diagnoses of a monitored service.
 10 October 2026 clarification, development can continue with mocked provider
 responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
-the next phase is database persistence.
+database persistence is also implemented; the next phase is the AI tool registry.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -447,9 +449,93 @@ the remaining budget, with up to ten seconds for process termination cleanup.
 Overlapping probes fail while that worker slot is occupied. No application
 tables, models, migrations or arbitrary queries were added. See `docs/PHASE-6.md`.
 
+## Application history — Phase 7
+
+Application storage is separate from the monitored `POSTGRES_*` database.
+It stores monitored service identities, check results, and the initial incident
+records. No autonomous incident creation or resolution workflow is added yet.
+
+On this computer local history is enabled in the ignored `.env`, with the
+database at `work/data/reliability.sqlite3` on D:. On a fresh checkout, configure:
+
+```dotenv
+STORAGE_MODE=local
+STORAGE_SQLITE_FILE=work/data/reliability.sqlite3
+```
+
+Then run the explicit migration and backend:
+
+```powershell
+.\scripts\migrate.ps1 -Action upgrade
+.\scripts\run.ps1
+```
+
+`migrate.ps1 -Action status` checks revision without upgrading. Startup and HTTP
+routes never apply migrations. Migration `0001_history` creates only application
+tables: `monitored_services`, `checks`, and `incidents`. PostgreSQL uses the
+separate `reliability` schema; SQLite uses the configured local file. Existing
+customer/provider tables are never used for application history.
+
+When enabled, website/browser/infrastructure checks and n8n execution-detail
+inspections record observations. n8n workflow/execution list pages are not health
+observations and are not recorded. Response bodies remain compatible; headers
+`X-History-Status` and `X-Check-Id` indicate whether a result was saved and its ID.
+An unavailable database does not change the health result or backend liveness;
+the response explicitly reports `unavailable` when the save fails.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/storage
+Invoke-RestMethod 'http://127.0.0.1:8000/history/services?limit=25'
+Invoke-RestMethod 'http://127.0.0.1:8000/history/checks?limit=25&synthetic=true'
+Invoke-RestMethod http://127.0.0.1:8000/history/incidents
+```
+
+History reads support bounded pagination (1–100 records, offset 0–10000), service
+IDs and check-status/synthetic filters. Detail reads use UUIDs. History routes
+are disabled in production pending authentication and deployment access controls.
+No public history-write, SQL, database-deletion or migration endpoint exists.
+
+Service identity includes the component, target fingerprint and synthetic flag.
+Changing targets or switching fixture/live data creates a distinct service.
+Only allowlisted normalized evidence is stored, at most 64 KiB per check;
+free-text summaries/logs and source connection strings are not stored. Source
+fingerprints are not an anonymity guarantee. Timestamps round-trip as UTC.
+
+The repository uses per-operation sessions/transactions, parameterized SQL,
+foreign keys, indexes and conflict-safe first registration. Failed transactions
+roll back. Incident records reference a specific unhealthy check on the same
+service. Initial statuses are OPEN/INVESTIGATING; the database rejects RESOLVED.
+Recovery-linked resolution will require a later migration and verified workflow.
+
+For the dedicated PostgreSQL application database:
+
+```dotenv
+STORAGE_MODE=postgresql
+STORAGE_DATABASE_URL=postgresql+psycopg://app_user:password@database.example:5432/app_database
+STORAGE_ALLOW_LOOPBACK=false
+```
+
+Keep the real URL only in ignored environment configuration. Query-string/DSN
+options are rejected; remote TLS is forced to verify-full using Certifi. Schema
+upgrades are an explicit operator action. Use a dedicated application database
+and appropriate schema permissions. Supabase/cloud connectivity and production
+permissions remain unverified. Test-only loopback/plaintext requires explicit
+opt-in and is rejected in production, as is local SQLite storage.
+
+Run `scripts/storage-smoke.ps1` to migrate a new scratch file, execute actual
+backend fixture checks, restart Uvicorn, and verify persisted results. For real
+PostgreSQL integration use `scripts/postgres-integration.ps1`; this computer has
+the portable EDB binaries under ignored `work/postgres-runtime/`. The harness
+creates a random isolated cluster/database on loopback, runs the complete test
+suite, and stops the server. It installs no Windows service. Cloud credentials
+are never used. Other machines can pass `-BinDir` after placing official binaries
+inside project `work/`. PostgreSQL tests skip explicitly without the harness.
+
+See `docs/PHASE-7.md` for validation details and limits.
+
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
-No Dockerfile, frontend, database, or empty future adapter files are included.
+No Dockerfile, frontend, or empty future adapter files are included.
 
 ## Documentation checked for Phase 1
 
@@ -458,5 +544,5 @@ No Dockerfile, frontend, database, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-6.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-7.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

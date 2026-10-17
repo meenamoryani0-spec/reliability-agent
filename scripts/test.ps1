@@ -19,12 +19,16 @@ $env:POSTGRES_PORT = '5432'
 $env:POSTGRES_DBNAME = ''
 $env:POSTGRES_USER = ''
 $env:POSTGRES_PASSWORD = ''
+$env:STORAGE_MODE = 'disabled'
+$env:STORAGE_SQLITE_FILE = 'work/data/reliability.sqlite3'
+$env:STORAGE_DATABASE_URL = ''
+$env:STORAGE_ALLOW_LOOPBACK = 'false'
 Push-Location (Join-Path $ProjectRoot 'backend')
 try {
     & $ProjectPython -m pytest --basetemp (Join-Path $ProjectWork 'pytest')
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
-    & $ProjectPython -m ruff check --config pyproject.toml . ..\scripts\smoke.py ..\scripts\browser-install.py
+    & $ProjectPython -m ruff check --config pyproject.toml . ..\scripts\smoke.py ..\scripts\browser-install.py ..\scripts\postgres-integration.py ..\scripts\storage-smoke.py
     if ($LASTEXITCODE -ne 0) { throw 'Lint checks failed.' }
-    & $ProjectPython -m ruff format --check --config pyproject.toml . ..\scripts\smoke.py ..\scripts\browser-install.py
+    & $ProjectPython -m ruff format --check --config pyproject.toml . ..\scripts\smoke.py ..\scripts\browser-install.py ..\scripts\postgres-integration.py ..\scripts\storage-smoke.py
     if ($LASTEXITCODE -ne 0) { throw 'Formatting checks failed.' }
 } finally { Pop-Location }
