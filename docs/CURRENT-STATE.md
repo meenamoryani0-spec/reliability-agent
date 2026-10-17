@@ -1,6 +1,6 @@
 # Current implementation state
 
-Updated 17 October 2026 after locally verified Phase 14 release preparation.
+Updated 18 October 2026 during the user-authorized free-tier deployment rollout.
 Repository: `D:\CODEX MAIN\2026-10-09\g\outputs\reliability-agent`.
 Read docs/PHASE-14.md, docs/DEPLOYMENT.md and this file. HANDOFF.md retains the original roadmap;
 its initial CURRENT STATE is historical.
@@ -96,11 +96,25 @@ Two non-root Dockerfiles, context exclusions, environment templates, standalone
 frontend output, a secret generator, local TLS smoke and deployed acceptance script
 are prepared. See docs/PHASE-14.md for exact final verification evidence.
 
-Actual cloud accounts/domains are not selected. Docker is unavailable locally, so
-image builds/Linux execution are unverified. Supabase application storage/TLS,
-cloud frontend/backend operation, edge configuration and deployed acceptance remain
-unverified. This is not a completed live Phase 14 deployment. Nothing was pushed,
-provisioned or deployed; existing .env/provider settings were not edited.
+The user created a free Supabase project and selected a free Render web service
+configuration. The repository is public on GitHub with a README and MIT license.
+Supabase application migrations are at `0005_verified_recovery`; the restricted
+runtime login, full TLS verification, and application table privileges passed live
+verification. The administrator password was entered privately and was not saved.
+Generated backend credentials stay in the ignored account-restricted work folder.
+
+Render startup and the image health probe can read the exact assigned hostname
+from trusted provider metadata when `API_ALLOWED_HOSTS` is omitted. Explicit host
+settings still take precedence; no request/forwarded-header or wildcard fallback
+exists. The image includes the official public Supabase production root CA, used
+only when selected through `STORAGE_SSL_CA_FILE`.
+
+Docker remains unavailable locally, so image builds/Linux execution are unverified.
+Cloud frontend/backend operation, edge configuration and deployed acceptance remain
+pending. This is not a completed live Phase 14 deployment. Existing `.env` and
+monitored-provider credentials were not edited; no paid resources were provisioned.
+See `RENDER-ROLLOUT.md` for current live-storage checks, local HTTP acceptance and
+the full-suite timing failure plus successful registry-group rerun.
 
 Remaining roadmap: finish Phase 14 cloud/container acceptance, then Phase 15's
 intentional-failure demo. Stop after committing this locally verified preparation;

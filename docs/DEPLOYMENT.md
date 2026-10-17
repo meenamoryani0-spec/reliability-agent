@@ -1,9 +1,11 @@
 # Deploying the single-operator release
 
-This is an implementation and rollout guide. No cloud deployment, Docker image
-build, Supabase connection, or live-provider validation has occurred. Docker is
-not installed in the current Windows environment. Do not treat local TLS tests
-as evidence of a deployed system.
+This is an implementation and rollout guide. On 18 October 2026, the selected
+Supabase session pooler was verified using full TLS validation, application
+migrations reached `0005_verified_recovery`, and the restricted runtime login and
+table privileges passed live verification. Backend/frontend cloud deployment,
+Linux Docker image execution and live monitored-provider validation remain pending.
+Docker is not installed in the current Windows environment.
 
 ## Topology
 
@@ -113,8 +115,22 @@ future migrations separately with the migration role, and back up/restore-test
 history. The application intentionally offers no SQL or migration HTTP endpoint.
 
 For Render, use the repository root as Docker context, `backend/Dockerfile`, the
-normal Docker CMD, secret settings and `/ready` as the health-check path. Ensure
-the edge preserves the exact configured Host. Provider pre-deploy hooks may be
+normal Docker CMD, secret settings and `/ready` as the health-check path. When
+`API_ALLOWED_HOSTS` is omitted and Render sets `RENDER=true`, startup and the image
+health probe use Render's `RENDER_EXTERNAL_HOSTNAME` as the one exact allowed host.
+Missing or malformed Render metadata stops startup; request/forwarded headers
+cannot supply this configuration. Explicit `API_ALLOWED_HOSTS` always takes precedence,
+including an explicitly empty list, and other hosts still require explicit configuration.
+For custom domains, explicitly configure their exact hosts and the assigned Render
+host as needed; no wildcard or request-derived fallback exists.
+
+The image includes Supabase's public production root CA at
+`/app/backend/certs/supabase-ca.crt`. Select it with `STORAGE_SSL_CA_FILE` for the
+verified Supabase deployment. It contains no private key or service credentials;
+see `backend/certs/README.md` for its official source and fingerprint. Other database
+providers can continue using certifi or an explicitly mounted CA.
+
+Ensure the edge preserves the exact configured Host. Provider pre-deploy hooks may be
 used if the selected service supports them; otherwise run the explicit migration
 as a controlled one-off operation. No blueprint provisions a paid plan here.
 

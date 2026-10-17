@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import threading
 from pathlib import Path
@@ -266,3 +267,82 @@ def test_production_entry_uses_one_bounded_worker_and_no_proxy_trust(monkeypatch
     assert options["limit_concurrency"] == 64
     assert options["timeout_graceful_shutdown"] == 180
     assert options["proxy_headers"] is options["access_log"] is False
+
+
+def test_render_assigned_host_is_exact_and_does_not_trust_request_headers(monkeypatch):
+    from app.serve import configure_platform_host
+
+    monkeypatch.delenv("API_ALLOWED_HOSTS", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "assigned-service-123.onrender.com")
+    configure_platform_host()
+    settings = Settings(_env_file=None, environment="production", api_access_token=TOKEN)
+    with TestClient(create_app(settings)) as client:
+        assert (
+            client.get("/health", headers={"Host": "assigned-service-123.onrender.com"}).status_code
+            == 200
+        )
+        assert (
+            client.get("/health", headers={"Host": "another-service.onrender.com"}).status_code
+            == 400
+        )
+        assert (
+            client.get(
+                "/health",
+                headers={
+                    "Host": "evil.example",
+                    "X-Forwarded-Host": "assigned-service-123.onrender.com",
+                },
+            ).status_code
+            == 400
+        )
+
+
+@pytest.mark.parametrize("explicit", ['["custom.example"]', "[]", "malformed"])
+def test_render_metadata_never_overwrites_explicit_host_configuration(monkeypatch, explicit):
+    from app.serve import configure_platform_host
+
+    monkeypatch.setenv("API_ALLOWED_HOSTS", explicit)
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "assigned-service.onrender.com")
+    configure_platform_host()
+    assert os.environ["API_ALLOWED_HOSTS"] == explicit
+
+
+@pytest.mark.parametrize("render", [None, "false", "True"])
+def test_render_host_fallback_is_inactive_outside_render(monkeypatch, render):
+    from app.serve import configure_platform_host
+
+    monkeypatch.delenv("API_ALLOWED_HOSTS", raising=False)
+    if render is None:
+        monkeypatch.delenv("RENDER", raising=False)
+    else:
+        monkeypatch.setenv("RENDER", render)
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "assigned-service.onrender.com")
+    configure_platform_host()
+    assert "API_ALLOWED_HOSTS" not in os.environ
+
+
+@pytest.mark.parametrize(
+    "hostname",
+    [
+        "",
+        "evil.example",
+        "*.onrender.com",
+        "https://service.onrender.com",
+        "service.onrender.com:443",
+        "SERVICE.onrender.com",
+        "service.onrender.com.evil.example",
+        "service.onrender.com\n",
+    ],
+)
+def test_invalid_render_metadata_stops_before_binding(monkeypatch, hostname):
+    from app.serve import main
+
+    monkeypatch.delenv("API_ALLOWED_HOSTS", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", hostname)
+    with patch("app.serve.uvicorn.run") as run:
+        with pytest.raises(SystemExit, match="exact assigned service hostname"):
+            main()
+        run.assert_not_called()

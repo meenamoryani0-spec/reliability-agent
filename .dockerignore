@@ -6,5 +6,7 @@
 !backend/requirements.txt
 !backend/app/
 !backend/app/**
+!backend/certs/
+!backend/certs/supabase-ca.crt
 **/__pycache__/
 **/*.pyc
