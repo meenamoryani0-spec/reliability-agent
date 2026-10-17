@@ -10,6 +10,7 @@ from types import MappingProxyType
 
 from pydantic import ValidationError
 
+from app.agent.safety import configured_secrets, contains_secret, reject_constant, unique_object
 from app.agent.tool_models import (
     Arguments,
     ExecutionArguments,
@@ -90,33 +91,6 @@ class BoundaryError(ValueError):
         super().__init__(code)
 
 
-def unique_object(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError()
-        value[key] = item
-    return value
-
-
-def reject_constant(_):
-    raise ValueError()
-
-
-def contains_secret(value, secrets):
-    # Inspect decoded strings: JSON escaping must not conceal a secret echo.
-    if isinstance(value, str):
-        return any(secret in value for secret in secrets)
-    if isinstance(value, dict):
-        return any(
-            contains_secret(key, secrets) or contains_secret(item, secrets)
-            for key, item in value.items()
-        )
-    if isinstance(value, list):
-        return any(contains_secret(item, secrets) for item in value)
-    return False
-
-
 class ToolRegistry:
     def __init__(
         self,
@@ -160,18 +134,7 @@ class ToolRegistry:
                 "check_postgres": partial(self._infrastructure, infrastructure_service, "postgres"),
             }
         )
-        self._secrets = tuple(
-            value.get_secret_value()
-            for value in (
-                config.nebius_api_key,
-                config.n8n_api_key,
-                config.vercel_token,
-                config.supabase_access_token,
-                config.postgres_password,
-                config.storage_database_url,
-            )
-            if value
-        )
+        self._secrets = configured_secrets(config)
 
     def definitions(self):
         """Fresh JSON schemas in the documented Nebius function descriptor shape.
@@ -322,6 +285,10 @@ class ToolRegistry:
 
     async def close(self):
         self._closed = True
+        await self.wait_idle()
+
+    async def wait_idle(self):
+        """Drain an adapter left active by a timed-out/cancelled caller."""
         if self._task is not None:
             await asyncio.shield(self._task)
 

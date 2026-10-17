@@ -22,12 +22,15 @@ server_environment = {
     **os.environ,
     "ENVIRONMENT": "test",
     "LOG_LEVEL": "INFO",
+    "INVESTIGATION_MODE": "fixture" if "--agent" in sys.argv else "disabled",
     "WEBSITE_TARGETS": "[]",
-    "N8N_MODE": "fixture" if "--n8n" in sys.argv else "disabled",
+    "N8N_MODE": "fixture" if "--n8n" in sys.argv or "--agent" in sys.argv else "disabled",
     "N8N_BASE_URL": "",
     "N8N_API_KEY": "",
     "N8N_DNS_NAMESERVERS": "[]",
-    "INFRASTRUCTURE_MODE": "fixture" if "--infrastructure" in sys.argv else "disabled",
+    "INFRASTRUCTURE_MODE": "fixture"
+    if "--infrastructure" in sys.argv or "--agent" in sys.argv
+    else "disabled",
     "INFRASTRUCTURE_DNS_NAMESERVERS": "[]",
     "INFRASTRUCTURE_TIMEOUT_SECONDS": "10",
     "VERCEL_TOKEN": "",
@@ -111,6 +114,46 @@ with (log_directory / "smoke-server.log").open("w", encoding="utf-8") as server_
             browser_results = []
             n8n_results = []
             infrastructure_results = []
+            if "--agent" in sys.argv:
+                agent = client.get("/agent")
+                agent.raise_for_status()
+                if agent.json()["inference_source"] != "scripted_fixture":
+                    raise RuntimeError("Unexpected inference provenance")
+                response = client.post(
+                    "/investigations",
+                    json={"question": "Why are booking confirmations missing?"},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                report = response.json()
+                if (
+                    report["status"] != "COMPLETED"
+                    or report["hypothesis"] != "authentication_rejection"
+                    or report["model_requests"] != 3
+                    or report["tool_calls"] != 4
+                    or report["evidence_provenance"] != "synthetic_only"
+                    or report["root_cause_verified"]
+                    or report["business_outcome_verified"]
+                    or report["incident_created"]
+                    or report["remediation_executed"]
+                ):
+                    raise RuntimeError("Unexpected investigation fixture result")
+                output_directory = project_root / "work" / "evidence"
+                output_directory.mkdir(parents=True, exist_ok=True)
+                (output_directory / "phase-9-investigation-smoke.json").write_text(
+                    json.dumps(report, indent=2), encoding="utf-8"
+                )
+                print(
+                    json.dumps(
+                        {
+                            "investigation": "PASS",
+                            "model_requests": 3,
+                            "tool_calls": 4,
+                            "inference_source": "scripted_fixture",
+                            "live_providers_verified": False,
+                        }
+                    )
+                )
             if "--infrastructure" in sys.argv:
                 registry = client.get("/services/infrastructure")
                 registry.raise_for_status()

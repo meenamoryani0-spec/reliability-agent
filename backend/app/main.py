@@ -4,12 +4,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.agent.orchestrator import InvestigationService
 from app.agent.tool_registry import ToolRegistry
 from app.api.browser import router as browser_router
 from app.api.checks import router as checks_router
 from app.api.health import router as health_router
 from app.api.history import router as history_router
 from app.api.infrastructure import router as infrastructure_router
+from app.api.investigations import router as investigations_router
 from app.api.n8n import router as n8n_router
 from app.api.tools import router as tools_router
 from app.config import Settings
@@ -31,6 +33,7 @@ def create_app(
     browser_checker: BrowserChecker | None = None,
     n8n_service: N8nService | None = None,
     infrastructure_service: InfrastructureService | None = None,
+    agent_client_factory=None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
     history = HistoryService(config)
@@ -43,7 +46,10 @@ def create_app(
             yield
         finally:
             try:
-                await application.state.tool_registry.close()
+                try:
+                    await application.state.investigator.close()
+                finally:
+                    await application.state.tool_registry.close()
             finally:
                 await history.close()
             logger.info("Backend stopped")
@@ -86,6 +92,9 @@ def create_app(
         infrastructure_service=application.state.infrastructure_service,
         history=history,
     )
+    application.state.investigator = InvestigationService(
+        config, application.state.tool_registry, client_factory=agent_client_factory
+    )
     application.include_router(health_router)
     application.include_router(checks_router)
     application.include_router(browser_router)
@@ -93,6 +102,7 @@ def create_app(
     application.include_router(infrastructure_router)
     application.include_router(history_router)
     application.include_router(tools_router)
+    application.include_router(investigations_router)
     return application
 
 

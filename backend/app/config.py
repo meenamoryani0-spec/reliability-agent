@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     )
     nebius_timeout_seconds: float = Field(default=45, ge=1, le=60)
     nebius_max_tokens: int = Field(default=2048, ge=128, le=4096)
+    investigation_mode: Literal["disabled", "fixture", "live"] = "disabled"
     website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
     website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
     n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
@@ -136,6 +137,14 @@ class Settings(BaseSettings):
             raise ValueError("Website target IDs must be unique")
         if self.environment == "production" and self.n8n_mode == "fixture":
             raise ValueError("Synthetic n8n mode is disabled in production")
+        if self.investigation_mode == "fixture" and (
+            self.environment == "production"
+            or self.n8n_mode != "fixture"
+            or self.infrastructure_mode != "fixture"
+        ):
+            raise ValueError(
+                "Investigation fixtures require local n8n/infrastructure fixture modes"
+            )
         if self.environment == "production" and self.infrastructure_mode == "fixture":
             raise ValueError("Synthetic infrastructure mode is disabled in production")
         if self.environment == "production" and (

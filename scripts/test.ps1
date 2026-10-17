@@ -2,6 +2,7 @@
 if (-not (Test-Path -LiteralPath $ProjectPython)) { throw 'Run scripts/setup.ps1 first.' }
 $env:ENVIRONMENT = 'test'
 $env:LOG_LEVEL = 'INFO'
+$env:INVESTIGATION_MODE = 'disabled'
 $env:N8N_MODE = 'disabled'
 $env:N8N_BASE_URL = ''
 $env:N8N_API_KEY = ''

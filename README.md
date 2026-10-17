@@ -17,6 +17,7 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Read-only Vercel deployment/events, Supabase project/service-health, and PostgreSQL probes.
 - Application history storage, explicit Alembic migrations, and service/check/incident repositories.
 - A strict internal registry of 13 bounded monitoring tools, with a local tool catalog.
+- A bounded model/tool investigation loop with validated evidence-linked conclusions.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -157,8 +158,8 @@ failures and are not diagnoses of a monitored service.
 10 October 2026 clarification, development can continue with mocked provider
 responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
-database persistence and the AI tool registry are also implemented; the next phase
-is the actual AI investigation loop.
+database persistence, the AI tool registry and the investigation loop are also
+implemented; automatic incident creation is next.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
@@ -557,8 +558,35 @@ health. History failure is reported separately from operational evidence.
 This runs real Chromium with intercepted fixtures, n8n/infrastructure fixtures,
 and new scratch SQLite history, then verifies the catalog over actual Uvicorn
 HTTP. No provider credentials or model request are needed. The investigation
-loop remains Phase 9. See `docs/PHASE-8.md` for contracts, verification and the
-current PostgreSQL harness limitation.
+loop is implemented in Phase 9. See `docs/PHASE-8.md` for registry contracts;
+Phase 9 successfully reran the PostgreSQL harness in the current environment.
+
+## AI investigation loop — Phase 9
+
+`GET /agent` describes configured inference mode and limits. `POST /investigations`
+accepts `{"question":"..."}` and runs the bounded model/tool/evidence cycle.
+Model-selected hypotheses must cite actual observations and pass support checks.
+Summaries remain scoped to observed failures; root cause and business outcome
+stay unverified. The loop creates no incident and performs no remediation.
+
+`INVESTIGATION_MODE` defaults to `disabled`. Run the local fixture smoke:
+
+```powershell
+.\scripts\agent-smoke.ps1
+```
+
+This uses actual Uvicorn, a scripted model fixture and monitoring fixtures. It
+verifies 3 model turns and 4 tools for `Why are booking confirmations missing?`.
+The result is explicitly labeled `scripted_fixture`; it is not live Nemotron.
+Interactive fixture mode requires investigation, n8n and infrastructure modes
+all set to `fixture`. Other fixture questions are rejected.
+
+Opt-in `INVESTIGATION_MODE=live` uses existing Nebius settings and can send the
+question/restricted evidence to the provider. Live model availability/tool calling
+remain unverified. Each investigation permits at most 6 completion attempts,
+8 tools and 120 seconds, with one investigation in flight. Invalid or unsupported
+conclusions fail closed while preserving collected evidence. Production access
+stays disabled. See `docs/PHASE-9.md` for configuration, contracts and limitations.
 
 Docker is optional for the overall architecture and is not needed locally.
 Choose the backend host before deciding whether deployment needs a container.
@@ -571,5 +599,5 @@ No Dockerfile, frontend, or empty future adapter files are included.
 - [uv environment variables](https://docs.astral.sh/uv/reference/environment/)
 - [Starlette TestClient requirements](https://github.com/Kludex/starlette/blob/main/docs/testclient.md)
 
-See `docs/PHASE-1.md` through `docs/PHASE-8.md` for validation results and `docs/HANDOFF.md`
+See `docs/PHASE-1.md` through `docs/PHASE-9.md` for validation results and `docs/HANDOFF.md`
 for the original requirements. No public software license has been selected.

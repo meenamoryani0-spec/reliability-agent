@@ -1,14 +1,17 @@
 import asyncio
+import json
 from typing import Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from app.agent.safety import load_object
 from app.config import Settings
 
 # Official API reference, verified 2026-10-09. No user-controlled destination.
 NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 MAX_RESPONSE_BYTES = 1_048_576
+MAX_REQUEST_BYTES = 262144
 
 
 class NebiusError(Exception):
@@ -31,9 +34,27 @@ class ModelsResponse(ProviderSchema):
     data: list[ModelEntry]
 
 
+class FunctionCall(ProviderSchema):
+    name: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    arguments: str = Field(max_length=4096)
+
+
+class ToolCall(ProviderSchema):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    type: Literal["function"]
+    function: FunctionCall
+
+
 class AssistantMessage(ProviderSchema):
     role: Literal["assistant"]
     content: str | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list, max_length=4)
+    refusal: str | None = Field(default=None, max_length=16384)
+
+    @field_validator("tool_calls", mode="before")
+    @classmethod
+    def absent_calls(cls, value):
+        return [] if value is None else value
 
 
 class CompletionChoice(ProviderSchema):
@@ -48,11 +69,7 @@ class CompletionResponse(ProviderSchema):
 
 
 class NebiusClient:
-    """Bounded text inference over the documented OpenAI-compatible REST API.
-
-    Phase 2 offers only a model catalog check and text completion. There is no
-    shell execution, remediation, public inference route, or automatic retry.
-    """
+    """Bounded text and tool-turn inference; execution belongs to the registry."""
 
     def __init__(self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None):
         if settings.nebius_api_key is None:
@@ -140,6 +157,53 @@ class NebiusClient:
             raise NebiusError("truncated_response")
         if choice.finish_reason != "stop":
             raise NebiusError("incomplete_response")
+        if choice.message.tool_calls or choice.message.refusal:
+            raise NebiusError("incomplete_response")
         if not choice.message.content or not choice.message.content.strip():
             raise NebiusError("empty_response")
+        return completion
+
+    async def next_turn(self, messages: list[dict], tools: list[dict]) -> CompletionResponse:
+        """One documented tool-calling round; no retries or automatic execution."""
+        payload = {
+            "model": self._settings.nebius_model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": self._settings.nebius_max_tokens,
+            "stream": False,
+            "store": False,
+        }
+        try:
+            if not 2 <= len(messages) <= 24 or not 1 <= len(tools) <= 13:
+                raise ValueError()
+            if (
+                len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode())
+                > MAX_REQUEST_BYTES
+            ):
+                raise NebiusError("request_too_large")
+        except (ValueError, TypeError, UnicodeError):
+            raise NebiusError("invalid_request") from None
+        raw = await self._request("POST", "chat/completions", payload)
+        try:
+            completion = CompletionResponse.model_validate(load_object(raw, MAX_RESPONSE_BYTES))
+        except (ValueError, TypeError, RecursionError):
+            raise NebiusError("invalid_response") from None
+        if completion.model != self._settings.nebius_model:
+            raise NebiusError("unexpected_model")
+        choice = completion.choices[0]
+        if choice.message.refusal:
+            raise NebiusError("refused")
+        if choice.finish_reason == "length":
+            raise NebiusError("truncated_response")
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            if len({call.id for call in choice.message.tool_calls}) != len(
+                choice.message.tool_calls
+            ):
+                raise NebiusError("invalid_response")
+        elif choice.finish_reason == "stop" and not choice.message.tool_calls:
+            if not choice.message.content or not choice.message.content.strip():
+                raise NebiusError("empty_response")
+        else:
+            raise NebiusError("incomplete_response")
         return completion
