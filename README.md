@@ -21,6 +21,25 @@ n8n/business automation, and infrastructure failures using operational evidence.
 - Opt-in automatic incidents from persisted unhealthy checks, with deduplication and evidence links.
 - A separately approved, one-shot n8n execution retry with a durable audit and operator CLI.
 - Separate recovery verification with durable node evidence before scoped incident resolution.
+- A local Next.js/TypeScript dashboard for service signals, incidents, evidence,
+  investigation, approval/action audit, and historical recovery proof.
+
+## Dashboard — Phase 13
+
+```powershell
+.\scripts\frontend-setup.ps1
+.\scripts\frontend-check.ps1
+# Populated synthetic preview in a fresh scratch database:
+.\scripts\frontend-demo.ps1 -Port 3000
+```
+
+Open <http://127.0.0.1:3000>. For the existing configured backend, run
+`scripts/run.ps1` and `scripts/frontend-run.ps1` in separate terminals instead.
+Refresh reads history, not fresh provider checks. Source labels, evidence ages,
+unknown causes, and recovery scope stay explicit. All history views are bounded
+to the latest 100 records. Remediation/approval/verification remain local operator
+CLI actions. Production authentication and deployment remain Phase 14.
+See [frontend/README.md](frontend/README.md) for setup, behavior, limits, and checks.
 
 `/health` reports **backend process liveness only**. It does not claim that
 Nebius, n8n, a website, or a database is connected or healthy. The Nebius adapter
@@ -163,7 +182,7 @@ responses and local fixtures. Website checks and synthetic Playwright booking
 flows, read-only n8n inspection and infrastructure checks are implemented;
 database persistence, the AI tool registry and the investigation loop are also
 implemented, including opt-in incidents and the first approved n8n retry action.
-Recovery verification is next.
+Recovery verification and the local dashboard are implemented.
 The Nebius client is implemented and mock-tested; real connectivity remains
 unverified until the live request passes. Require live integration and end-to-end
 validation before presenting the complete application as working.
