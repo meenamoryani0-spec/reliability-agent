@@ -103,9 +103,13 @@ class ToolRegistry:
         n8n_service,
         infrastructure_service,
         history,
+        website_targets=None,
     ):
         self._config = config
         self._targets = {target.id: target for target in config.website_targets}
+        self._operator_targets = website_targets
+        if website_targets is not None:
+            self._targets = website_targets.cached
         self._history = history
         self._slot = threading.Lock()
         self._task = None
@@ -203,8 +207,11 @@ class ToolRegistry:
                 arguments_json, object_pairs_hook=unique_object, parse_constant=reject_constant
             )
             arguments = spec.arguments.model_validate(raw)
-            if isinstance(arguments, WebsiteArguments) and arguments.target_id not in self._targets:
-                raise BoundaryError("target_not_registered")
+            if isinstance(arguments, WebsiteArguments):
+                if self._operator_targets is not None:
+                    await self._operator_targets.all()
+                if arguments.target_id not in self._targets:
+                    raise BoundaryError("target_not_registered")
         except BoundaryError as error:
             return ToolResult(name=name, status="REJECTED", reason=error.code)
         except (ValueError, TypeError, RecursionError):
@@ -328,6 +335,8 @@ class ToolRegistry:
             await asyncio.shield(self._task)
 
     async def _list_websites(self, _):
+        if self._operator_targets is not None:
+            await self._operator_targets.all()
         return {"targets": [{"id": key} for key in sorted(self._targets)]}, None
 
     async def _website(self, check, arguments):

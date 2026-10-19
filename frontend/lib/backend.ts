@@ -37,7 +37,7 @@ export async function boundedJson(response: Response, maximum = MAX_RESPONSE_BYT
   } finally { await reader.cancel().catch(() => {}); }
 }
 
-export async function backendRead<T>(path: string, schema: z.ZodType<T>, options?: { question: string }): Promise<ReadResult<T>> {
+export async function backendRead<T>(path: string, schema: z.ZodType<T>, options?: Record<string, unknown>, timeoutMs?: number): Promise<ReadResult<T>> {
   try {
     const base = backendBase();
     const config = deployment();
@@ -46,13 +46,13 @@ export async function backendRead<T>(path: string, schema: z.ZodType<T>, options
     if (config) headers.Authorization = `Bearer ${config.token}`;
     const response = await fetch(`${base}${path}`, {
       method: options ? "POST" : "GET", cache: "no-store", redirect: "error",
-      signal: AbortSignal.timeout(options ? 125_000 : 8000),
+      signal: AbortSignal.timeout(timeoutMs ?? (options ? 125_000 : 8000)),
       headers,
       body: options ? JSON.stringify(options) : undefined,
     });
     if (!response.ok) {
       await response.body?.cancel();
-      return { data: null, error: response.status === 503 ? "unavailable" : response.status === 404 ? "access_unavailable" : "backend_error" };
+      return { data: null, error: response.status === 503 ? "unavailable" : response.status === 404 ? "access_unavailable" : response.status === 409 ? "busy_or_limit" : response.status === 422 ? "invalid_input" : "backend_error" };
     }
     const parsed = schema.safeParse(await boundedJson(response));
     return parsed.success ? { data: parsed.data, error: null } : { data: null, error: "invalid_response" };

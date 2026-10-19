@@ -1,5 +1,12 @@
 # Project implementation instructions
 
+- 19 October user-authorized operator setup adds migration `0006_operator_targets`,
+  persistent operator-managed public website targets, and manual website/provider
+  reads in the authenticated dashboard. Read docs/MONITORING-SETUP.md. Older
+  references to head 0005 and pending frontend cloud deployment are historical.
+  Keep model tools limited to registered IDs; target registration is operator-only.
+  No scheduler, credential changes, paid plan or production remediation is implied.
+
 Read README.md and docs/HANDOFF.md before extending the application.
 
 - Keep all new project files, virtual environments, caches, and logs on D:.

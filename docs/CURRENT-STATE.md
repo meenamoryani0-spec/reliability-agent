@@ -1,5 +1,14 @@
 # Current implementation state
 
+19 October 2026 update: Vercel frontend deployment and actual HTTPS operator
+login/history/storage/logout acceptance passed at reliability-agent.vercel.app.
+The subsequent operator-setup change adds persistent website registration and
+manual HTTP/DNS/TLS checks plus explicit n8n/infrastructure inspection controls.
+Its schema head is `0006_operator_targets`; read MONITORING-SETUP.md for migration,
+validation and remaining limits. Earlier cloud-pending statements below are
+historical. Live n8n/AI/provider behavior remains unverified; the supplied n8n
+Cloud instance is on a trial without public API access. No paid plan was enabled.
+
 Updated 18 October 2026 during the user-authorized free-tier deployment rollout.
 Repository: `D:\CODEX MAIN\2026-10-09\g\outputs\reliability-agent`.
 Read docs/PHASE-14.md, docs/DEPLOYMENT.md and this file. HANDOFF.md retains the original roadmap;

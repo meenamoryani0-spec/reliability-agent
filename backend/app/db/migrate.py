@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.db.models import SCHEMA
 
-HEAD = "0005_verified_recovery"
+HEAD = "0006_operator_targets"
 
 
 def migration_config(connection):

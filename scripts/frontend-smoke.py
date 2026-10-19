@@ -68,6 +68,12 @@ def main():
                     page.goto(str(frontend.base_url) + "/dashboard")
                     expect(page.get_by_role("heading", name="Reliability overview")).to_be_visible()
                     expect(page.get_by_text("One incident needs a closer look.")).to_be_visible()
+                    page.get_by_label("Website URL", exact=True).fill("https://example.com/health")
+                    page.get_by_role("button", name="Save website", exact=True).click()
+                    expect(page.get_by_text("Website saved.", exact=False)).to_be_visible()
+                    expect(
+                        page.get_by_role("button", name="Run checks", exact=True)
+                    ).to_be_enabled()
                     no_overflow(page)
                     page.screenshot(
                         path=str(evidence / "phase-13-desktop.png"),
@@ -151,6 +157,16 @@ def main():
                     expect(
                         page.get_by_role("heading", name="Workspace capabilities")
                     ).to_be_visible()
+                    page.get_by_role("button", name="List workflows", exact=True).click()
+                    expect(
+                        page.get_by_text("Workflow wf-booking · Active", exact=True)
+                    ).to_be_visible()
+                    page.get_by_role("button", name="Find failed executions", exact=True).click()
+                    expect(
+                        page.get_by_role("button", name="Inspect evidence", exact=True)
+                    ).to_be_visible()
+                    page.get_by_role("button", name="Inspect evidence", exact=True).click()
+                    expect(page.get_by_text("View execution evidence", exact=True)).to_be_visible()
                     no_overflow(page)
                     page.close()
             empty_environment = fixture_environment()

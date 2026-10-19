@@ -12,11 +12,13 @@ from app.api.health import router as health_router
 from app.api.history import router as history_router
 from app.api.infrastructure import router as infrastructure_router
 from app.api.investigations import router as investigations_router
+from app.api.monitoring import router as monitoring_router
 from app.api.n8n import router as n8n_router
 from app.api.tools import router as tools_router
 from app.config import Settings
 from app.db.service import HistoryService
 from app.logging import configure_logging
+from app.monitoring import WebsiteTargets
 from app.security import AccessBoundary
 from app.tools.browser import BrowserChecker
 from app.tools.infrastructure import InfrastructureService
@@ -52,6 +54,7 @@ def create_app(
                 finally:
                     await application.state.tool_registry.close()
             finally:
+                await application.state.operator_targets.close()
                 await history.close()
             logger.info("Backend stopped")
 
@@ -68,6 +71,7 @@ def create_app(
     application.state.settings = config
     application.state.history = history
     application.state.website_targets = {target.id: target for target in config.website_targets}
+    application.state.operator_targets = WebsiteTargets(config, history)
     application.state.website_checker = website_checker or WebsiteChecker(
         nameservers=config.website_dns_nameservers
     )
@@ -93,12 +97,14 @@ def create_app(
         n8n_service=application.state.n8n_service,
         infrastructure_service=application.state.infrastructure_service,
         history=history,
+        website_targets=application.state.operator_targets,
     )
     application.state.investigator = InvestigationService(
         config, application.state.tool_registry, client_factory=agent_client_factory
     )
     application.include_router(health_router)
     application.include_router(checks_router)
+    application.include_router(monitoring_router)
     application.include_router(browser_router)
     application.include_router(n8n_router)
     application.include_router(infrastructure_router)

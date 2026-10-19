@@ -68,6 +68,7 @@ def engine(database_config):
                         "retry_actions",
                         "recovery_verifications",
                         "ra_schema_version",
+                        "website_targets",
                     }
                     connection.exec_driver_sql(f'DROP TABLE "{table}"')
         value.dispose()
