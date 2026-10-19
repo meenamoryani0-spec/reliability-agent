@@ -5,9 +5,11 @@ n8n/business automation, and infrastructure failures using operational evidence.
 
 ## Release status
 
-The application has a locally verified FastAPI backend and Next.js operator
-workspace. Authenticated deployment preparation is implemented; cloud deployment,
-Linux container execution, and live Nebius/provider integrations remain unverified.
+The application has a verified FastAPI backend and Next.js operator workspace.
+The authenticated Vercel/Render/Supabase deployment and manual public website
+HTTP/DNS/TLS checks passed live acceptance on 19 October 2026. The dashboard now
+supports persistent website setup and explicit provider-read controls. Live n8n
+and Nebius integrations remain unverified; no background scheduler is implemented.
 The phase sections below record incremental implementation. For the current
 boundaries, read [CURRENT-STATE.md](docs/CURRENT-STATE.md) and
 [DEPLOYMENT.md](docs/DEPLOYMENT.md).

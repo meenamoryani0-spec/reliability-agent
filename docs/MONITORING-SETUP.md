@@ -57,6 +57,12 @@ The schema revision is checked before migration and table creation/version updat
 must commit in one transaction. Deploy the matching backend and frontend commits
 and verify readiness, login, target persistence and a real operator-triggered check.
 
+The Supabase rollout additionally enables RLS on this new table, with SELECT and
+INSERT policies only for the existing restricted runtime role. No public Data API
+access or provider credential permissions were added. Actual hdworks.tech HTTP,
+DNS and TLS observations were healthy and persisted; deployed auth/storage smoke
+passed. n8n/AI integrations remain disabled and unverified.
+
 The older backend expects revision 0005, so coordinate the migration with the new
 rollout. Do not downgrade or discard targets for rollback. The migration refuses
 downgrade once saved targets exist. Continuous monitoring and live AI/provider

@@ -31,6 +31,14 @@ export function actionLabel(action: Action, now: number): string {
 export function summary(check: Check): string {
   return typeof check.payload.summary === "string" ? check.payload.summary : `${humanize(check.kind)} observation`;
 }
+export function componentLabel(check: Check): string {
+  const evidence = check.payload.evidence;
+  if (check.category === "website" && evidence && typeof evidence === "object" && !Array.isArray(evidence)) {
+    const hostname = (evidence as Record<string, unknown>).hostname;
+    if (typeof hostname === "string" && /^[a-z0-9][a-z0-9.-]{0,251}[a-z0-9]$/.test(hostname)) return hostname;
+  }
+  return check.component.replace("workflow:", "Workflow · ");
+}
 export function matches(search: string, ...values: string[]): boolean {
   return values.join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
 }
