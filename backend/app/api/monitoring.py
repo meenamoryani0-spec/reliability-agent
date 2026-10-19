@@ -37,6 +37,13 @@ async def capabilities(request: Request):
     return {
         "websites": websites,
         "n8n": request.app.state.n8n_service.describe(),
+        "n8n_reports": {
+            "enabled": request.app.state.settings.n8n_events_enabled,
+            "workflow_count": len(set(request.app.state.settings.n8n_events_workflow_ids))
+            if request.app.state.settings.n8n_events_enabled
+            else 0,
+            "coverage": "received_failure_notifications_only",
+        },
         "infrastructure": request.app.state.infrastructure_service.describe(),
         "automatic_monitoring": False,
     }

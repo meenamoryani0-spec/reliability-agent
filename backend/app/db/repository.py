@@ -112,7 +112,7 @@ class HistoryRepository:
         except SQLAlchemyError:
             raise StorageError("storage_unavailable") from None
 
-    def record(self, value: Snapshot):
+    def record(self, value: Snapshot, *, identifier=None):
         # Revalidate at the repository boundary before any transaction begins.
         snapshot = Snapshot.model_validate(value.model_dump())
         with self.transaction() as session:
@@ -128,6 +128,29 @@ class HistoryRepository:
                 )
                 .on_conflict_do_nothing(index_elements=["id"])
             )
+            if identifier is not None:
+                identifier = valid_id(identifier)
+                session.execute(
+                    insert(StoredCheck)
+                    .values(
+                        id=identifier,
+                        service_id=snapshot.service_id,
+                        kind=snapshot.kind,
+                        status=snapshot.status,
+                        observed_at=snapshot.observed_at,
+                        payload=snapshot.payload,
+                        created_at=now(),
+                    )
+                    .on_conflict_do_nothing(index_elements=["id"])
+                )
+                row = session.get(StoredCheck, identifier)
+                if (row.service_id, row.kind, row.status) != (
+                    snapshot.service_id,
+                    snapshot.kind,
+                    snapshot.status,
+                ):
+                    raise StorageError("observation_identity_mismatch")
+                return identifier
             check = StoredCheck(
                 service_id=snapshot.service_id,
                 kind=snapshot.kind,
@@ -176,6 +199,22 @@ class HistoryRepository:
                 .where(StoredCheck.id == valid_id(check_id))
             ).first()
             return check_dict(*pair) if pair else None
+
+    def failure_reports(self, *, service_ids):
+        if not 1 <= len(service_ids) <= 25:
+            raise StorageError("invalid_pagination")
+        identifiers = [valid_id(identifier) for identifier in service_ids]
+        with self.transaction() as session:
+            query = (
+                select(StoredCheck, MonitoredService)
+                .join(MonitoredService)
+                .where(
+                    StoredCheck.service_id.in_(identifiers), StoredCheck.kind == "failure_report"
+                )
+                .order_by(StoredCheck.created_at.desc(), StoredCheck.id.desc())
+                .limit(25)
+            )
+            return [check_dict(row, service) for row, service in session.execute(query)]
 
     @staticmethod
     def _incident_query():

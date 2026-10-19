@@ -73,6 +73,17 @@ test("BFF sends the service token only on its fixed server connection", async ()
   };
   assert.deepEqual(await backendRead("/health", z.object({ status: z.literal("ok") })), { data: { status: "ok" }, error: null });
 });
+
+test("external links can reach HTML sign-in while APIs, frames and mutations stay fenced", () => {
+  const navigation = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
+  assert.equal(sameOrigin(request(navigation), false, true), true);
+  assert.equal(sameOrigin(request(navigation)), false);
+  assert.equal(sameOrigin(request({ ...navigation, origin: "https://dashboard.example", "content-type": "application/json" }), true, true), false);
+  assert.equal(sameOrigin(request({ ...navigation, host: "evil.example", "x-forwarded-host": "dashboard.example" }), false, true), false);
+  assert.equal(sameOrigin(request({ ...navigation, origin: "https://evil.example" }), false, true), false);
+  assert.equal(sameOrigin(request({ ...navigation, "sec-fetch-dest": "iframe" }), false, true), false);
+  assert.equal(sameOrigin(request({ ...navigation, "sec-fetch-mode": "cors" }), false, true), false);
+});
 test("operator login accepts only the generated key shape and exact digest", () => {
   assert.equal(validOperatorKey(operator), true);
   for (const input of ["wrong", operator + "x", { key: operator }, null, "a".repeat(200)]) assert.equal(validOperatorKey(input), false);

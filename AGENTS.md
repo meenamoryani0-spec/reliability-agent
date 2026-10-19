@@ -1,5 +1,13 @@
 # Project implementation instructions
 
+- The user's 19 October request authorizes repairing setup and project clarity.
+  FREE-N8N-REPORTING.md documents an optional, disabled-by-default Error Trigger
+  receiver. It accepts only two IDs through a separate ingest-only token, keeps
+  source identity separate, and deduplicates immutable saved observations. It
+  adds one bounded model read tool only when reporting is enabled. This is not
+  API polling, node evidence, recovery proof or remediation. Creating a draft
+  does not authorize silently replacing existing workflow error handlers.
+
 - 19 October user-authorized operator setup adds migration `0006_operator_targets`,
   persistent operator-managed public website targets, and manual website/provider
   reads in the authenticated dashboard. Read docs/MONITORING-SETUP.md. Older

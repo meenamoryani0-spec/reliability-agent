@@ -8,7 +8,7 @@ from app.db.capture import HistoryCapture, IncidentCapture
 from app.db.database import create_storage_engine
 from app.db.migrate import HEAD, current_revision
 from app.db.repository import HistoryRepository, StorageError
-from app.db.snapshots import snapshot_for
+from app.db.snapshots import Snapshot, snapshot_for
 
 logger = logging.getLogger("reliability_agent")
 
@@ -69,12 +69,21 @@ class HistoryService:
         task.add_done_callback(self._pending.discard)
         return await asyncio.shield(task)
 
+    async def capture_report(self, snapshot: Snapshot, identifier: str):
+        """Internal, deterministic report capture; never a model-controlled write."""
+        if self._closed:
+            return HistoryCapture(status="unavailable")
+        task = asyncio.create_task(asyncio.to_thread(self._capture_sync, snapshot, identifier))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+        return await asyncio.shield(task)
+
     def _capture_sync(self, result, source):
         incident = IncidentCapture(status="unavailable" if self.incidents_enabled else "disabled")
         if self.repository is None and not self.incidents_enabled:
             return HistoryCapture(status="disabled", incident=incident)
         try:
-            snapshot = snapshot_for(result, source)
+            snapshot = result if isinstance(result, Snapshot) else snapshot_for(result, source)
             if snapshot.status != "UNHEALTHY" and self.incidents_enabled:
                 incident = IncidentCapture(status="not_applicable")
             if self.repository is None:
@@ -82,7 +91,11 @@ class HistoryService:
             if not self.verify():
                 return HistoryCapture(status="unavailable", incident=incident)
             # Commit check history first; incident failure must not roll it back.
-            identifier = self.repository.record(snapshot)
+            identifier = (
+                self.repository.record(snapshot, identifier=source)
+                if isinstance(result, Snapshot)
+                else self.repository.record(snapshot)
+            )
         except Exception:
             self.state = "unavailable"
             logger.warning("Check history could not be saved")
@@ -105,6 +118,7 @@ class HistoryService:
             "services",
             "checks",
             "check",
+            "failure_reports",
             "incidents",
             "incident",
             "incident_observations",

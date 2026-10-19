@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     n8n_recovery_flows: dict[ResourceId, FlowPolicy] = Field(default_factory=dict, max_length=25)
     n8n_base_url: str | None = Field(default=None, max_length=2048)
     n8n_api_key: SecretStr | None = Field(default=None, repr=False)
+    n8n_events_enabled: bool = False
+    n8n_events_token: SecretStr | None = Field(default=None, repr=False)
+    n8n_events_workflow_ids: list[ResourceId] = Field(default_factory=list, max_length=25)
     n8n_timeout_seconds: float = Field(default=10, ge=1, le=30)
     n8n_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
     infrastructure_mode: Literal["disabled", "fixture", "live"] = "disabled"
@@ -109,6 +112,32 @@ class Settings(BaseSettings):
     storage_database_url: SecretStr | None = Field(default=None, repr=False)
     storage_ssl_ca_file: str | None = Field(default=None, max_length=1024)
     storage_allow_loopback: bool = False
+
+    @field_validator("n8n_events_token", mode="before")
+    @classmethod
+    def validate_events_token(cls, value):
+        return cls.validate_access_token(value)
+
+    @model_validator(mode="after")
+    def validate_events(self):
+        if self.n8n_events_enabled:
+            if self.n8n_mode == "fixture" or self.investigation_mode == "fixture":
+                raise ValueError("Live n8n reports cannot be mixed into fixture mode")
+            if not (
+                self.n8n_events_token
+                and self.n8n_base_url
+                and self.n8n_events_workflow_ids
+                and self.storage_mode != "disabled"
+                and self.operations_access_enabled
+            ):
+                raise ValueError(
+                    "n8n reports require scoped authentication, source, allowlist and storage"
+                )
+            if self.api_access_token and (
+                self.n8n_events_token.get_secret_value() == self.api_access_token.get_secret_value()
+            ):
+                raise ValueError("n8n reports must use a separate ingest-only credential")
+        return self
 
     @field_validator("storage_ssl_ca_file", mode="before")
     @classmethod

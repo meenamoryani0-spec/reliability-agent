@@ -45,7 +45,8 @@ class AccessBoundary:
         async def reject(status, detail):
             await JSONResponse({"detail": detail}, status_code=status)(scope, receive, secure_send)
 
-        if self.config.environment != "production":
+        event_ingest = scope["path"] == "/integrations/n8n/failures"
+        if self.config.environment != "production" and not event_ingest:
             await self.app(scope, receive, secure_send)
             return
         headers = Headers(scope=scope)
@@ -58,12 +59,19 @@ class AccessBoundary:
         if public:
             await self.app(scope, receive, secure_send)
             return
-        if not self.config.deployment_access_configured:
+        if event_ingest:
+            if not self.config.n8n_events_enabled or scope["method"] != "POST":
+                await reject(404, "Access unavailable")
+                return
+            token = self.config.n8n_events_token
+        elif not self.config.deployment_access_configured:
             await reject(404, "Access unavailable")
             return
+        else:
+            token = self.config.api_access_token
         # This is a server-to-server API. Browser origins/cookies are never authority.
         authorization = headers.getlist("authorization")
-        expected = "Bearer " + self.config.api_access_token.get_secret_value()
+        expected = "Bearer " + token.get_secret_value()
         candidate = authorization[0] if len(authorization) == 1 else ""
         if (
             len(candidate) > 256
@@ -82,5 +90,6 @@ class AccessBoundary:
             await reject(429, "Request limit reached")
             return
         self.tokens -= 1
-        scope.setdefault("state", {})["authenticated"] = True
+        scope.setdefault("state", {})["authenticated"] = not event_ingest
+        scope["state"]["n8n_report_authenticated"] = event_ingest
         await self.app(scope, receive, secure_send)

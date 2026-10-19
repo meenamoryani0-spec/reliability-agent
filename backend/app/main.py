@@ -14,6 +14,7 @@ from app.api.infrastructure import router as infrastructure_router
 from app.api.investigations import router as investigations_router
 from app.api.monitoring import router as monitoring_router
 from app.api.n8n import router as n8n_router
+from app.api.n8n_reports import router as n8n_reports_router
 from app.api.tools import router as tools_router
 from app.config import Settings
 from app.db.service import HistoryService
@@ -107,6 +108,7 @@ def create_app(
     application.include_router(monitoring_router)
     application.include_router(browser_router)
     application.include_router(n8n_router)
+    application.include_router(n8n_reports_router)
     application.include_router(infrastructure_router)
     application.include_router(history_router)
     application.include_router(tools_router)

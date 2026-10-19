@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { status } from "./contracts";
+import { checkSchema, status } from "./contracts";
 
 export const targetSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), url: z.string().max(2048),
@@ -12,6 +12,8 @@ export const infrastructureId = z.enum(["vercel-deployment", "vercel-events", "s
 export const monitoringSchema = z.object({
   websites: z.object({ targets: z.array(targetSchema).max(25), error: z.string().nullable() }),
   n8n: integrationSchema,
+  n8n_reports: z.object({ enabled: z.boolean(), workflow_count: z.number().int().min(0).max(25),
+    coverage: z.literal("received_failure_notifications_only") }).optional(),
   infrastructure: z.object({ mode: providerMode, synthetic: z.boolean(), checks: z.array(z.object({ id: infrastructureId, configured: z.boolean() })).max(5) }),
   automatic_monitoring: z.literal(false),
 });
@@ -19,6 +21,7 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("register_website"), url: z.string().trim().min(1).max(2048) }).strict(),
   z.object({ action: z.literal("check_website"), target_id: targetSchema.shape.id }).strict(),
   z.object({ action: z.literal("n8n_workflows") }).strict(),
+  z.object({ action: z.literal("n8n_reports") }).strict(),
   z.object({ action: z.literal("n8n_failed"), workflow_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional() }).strict(),
   z.object({ action: z.literal("n8n_execution"), execution_id: z.string().regex(/^[1-9][0-9]{0,18}$/) }).strict(),
   z.object({ action: z.literal("infrastructure"), check_id: infrastructureId }).strict(),
@@ -52,3 +55,7 @@ export type Monitoring = z.infer<typeof monitoringSchema>;
 export type OperatorRequest = z.infer<typeof operatorRequestSchema>;
 export type WebsiteResults = z.infer<typeof websiteResultSchema>;
 export type N8nResults = z.infer<typeof n8nResultSchema>;
+
+export const failureReportsSchema = z.object({ reports: z.array(checkSchema).max(25),
+  coverage: z.literal("received_failure_notifications_only"), absence_proves_health: z.literal(false) });
+export type FailureReports = z.infer<typeof failureReportsSchema>;

@@ -67,3 +67,8 @@ The older backend expects revision 0005, so coordinate the migration with the ne
 rollout. Do not downgrade or discard targets for rollback. The migration refuses
 downgrade once saved targets exist. Continuous monitoring and live AI/provider
 acceptance remain separate work.
+# Additional free n8n reporting path
+
+Read [FREE-N8N-REPORTING.md](FREE-N8N-REPORTING.md) for the optional Error Trigger
+receiver. It is disabled until privately configured and validated. Public API
+controls and reported-failure notifications have different coverage.

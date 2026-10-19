@@ -37,3 +37,15 @@ test("read tools cannot be redirected to arbitrary providers or remediation rout
   }
   assert.equal(operatorRequestSchema.safeParse({ action: "n8n_execution", execution_id: "123" }).success, true);
 });
+
+test("received n8n reports use a fixed authenticated read and retain limited coverage", async () => {
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "http://127.0.0.1:8000/monitoring/n8n/reports");
+    assert.equal(init?.method, "GET");
+    return Response.json({ reports: [], coverage: "received_failure_notifications_only", absence_proves_health: false });
+  };
+  const response = await POST(request({ action: "n8n_reports" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.absence_proves_health, false);
+  assert.equal((await POST(request({ action: "n8n_reports", token: "secret" }))).status, 422);
+});

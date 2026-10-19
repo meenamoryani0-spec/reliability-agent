@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRightIcon, GlobeIcon, LayersIcon, LightningBoltIcon } from "@radix-ui/react-icons";
-import type { ReadResult } from "@/lib/contracts";
-import { monitoringSchema, type Monitoring, type N8nResults, type OperatorRequest, type WebsiteResults } from "@/lib/monitoring";
+import type { ReadResult, Snapshot } from "@/lib/contracts";
+import { monitoringSchema, type FailureReports, type Monitoring, type N8nResults, type OperatorRequest, type WebsiteResults } from "@/lib/monitoring";
 import { Evidence, Notice, Source, Status } from "./primitives";
 import { humanize } from "@/lib/presentation";
+import { ProjectGuide } from "./project-guide";
 
 const errorMessage = (code: string | null) => code === "invalid_input"
   ? "Use a public http:// or https:// address without a password, query string, or fragment."
@@ -13,8 +14,8 @@ const errorMessage = (code: string | null) => code === "invalid_input"
   : code === "access_unavailable" ? "This operation is unavailable. The backend may still be updating."
   : "The request could not finish. Check the connection and try again; no successful check is being claimed.";
 
-export function MonitoringPanel({ onComplete, compact = false, onConnections }: {
-  onComplete: () => Promise<void>; compact?: boolean; onConnections?: () => void;
+export function MonitoringPanel({ onComplete, compact = false, onConnections, overview, now = 0 }: {
+  onComplete: () => Promise<void>; compact?: boolean; onConnections?: () => void; overview?: Snapshot; now?: number;
 }) {
   const [capabilities, setCapabilities] = useState<Monitoring | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -23,6 +24,7 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections }: 
   const [message, setMessage] = useState<string | null>(null);
   const [results, setResults] = useState<WebsiteResults | null>(null);
   const [n8n, setN8n] = useState<N8nResults | null>(null);
+  const [reports, setReports] = useState<FailureReports | null>(null);
   const [executionId, setExecutionId] = useState("");
   const [infrastructure, setInfrastructure] = useState<Record<string, unknown> | null>(null);
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -65,7 +67,8 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections }: 
   }
 
   return <div className="monitoring space-y-6">
-    <section className="panel p-6" aria-label="Website setup and checks">
+    {overview && <ProjectGuide settings={capabilities} data={overview} now={now} onConnections={onConnections} />}
+    <section id="website-setup" className="panel p-6" aria-label="Website setup and checks">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">START WITH A REAL SYSTEM</p><h2 className="mt-2 text-lg font-medium">Connect your website</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">Save a website address, then check its response, DNS, and security certificate. No AI key is needed.</p></div><GlobeIcon className="size-5 text-emerald-600" /></div>
       <form onSubmit={(event) => void register(event)} className="mt-5 flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 text-xs text-slate-400" htmlFor="website-url">Website URL<input id="website-url" type="url" required maxLength={2048} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com" className="mt-2 w-full" disabled={!!pending || !capabilities || !!capabilities.websites.error} /></label><button className="button-primary" disabled={!!pending || !capabilities || !!capabilities.websites.error}>{pending === "register_website" ? "Saving…" : "Save website"}</button></form>
       <p className="mt-3 text-xs leading-5 text-slate-400">Manual checks only. These checks do not submit forms, create bookings, or prove every business flow works. Refresh records reloads saved evidence.</p>
@@ -74,13 +77,14 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections }: 
       {message && <div className="mt-4"><Notice>{message}</Notice></div>}
       <div className="mt-4 divide-y divide-slate-800">{capabilities?.websites.targets.map((target) => <div className="flex flex-wrap items-center justify-between gap-3 py-4" key={target.id}><div className="min-w-0"><p className="break-all text-sm font-medium">{target.url}</p><p className="mt-1 text-xs text-slate-400">Saved target · HTTP, DNS, TLS</p></div><button className="button-secondary" disabled={!!pending} onClick={() => void checkWebsite(target.id)}>{pending === "check_website" ? "Checking…" : "Run checks"}</button></div>)}</div>
       {capabilities && !capabilities.websites.error && !capabilities.websites.targets.length && <p className="mt-4 text-sm text-slate-400">No websites connected yet. Add the public address above.</p>}
-      {results && <div className="mt-4 space-y-3" role="status">{results.results.map(({ check, history }) => <div className="rounded-lg border border-slate-800 p-4" key={check.check_type}><div className="flex items-center justify-between gap-3"><strong className="text-sm">{check.check_type === "ssl" ? "TLS certificate" : check.check_type.toUpperCase()}</strong><Status value={check.status} /></div><p className="mt-2 text-sm text-slate-400">{check.summary}</p><p className="mt-2 text-xs text-slate-400">{history.status === "saved" ? "Saved to Checks history." : "The observation was returned, but history was not saved. Run it again only when you want a fresh check."}</p><Evidence value={check.evidence} /></div>)}</div>}
+      {results && <div className="mt-4 space-y-3" role="status">{results.results.map(({ check, history }) => <div className="rounded-lg border border-slate-800 p-4" key={check.check_type}><div className="flex items-center justify-between gap-3"><strong className="text-sm">{check.check_type === "ssl" ? "TLS certificate" : check.check_type.toUpperCase()}</strong><Status value={check.status} /></div><p className="mt-2 text-sm text-slate-400">{check.summary}</p><p className="mt-2 text-xs text-slate-400">Observed at <time dateTime={check.checked_at}>{new Date(check.checked_at).toLocaleString()}</time></p><p className="mt-2 text-xs text-slate-400">{history.status === "saved" ? "Saved to Checks history." : "The observation was returned, but history was not saved. Run it again only when you want a fresh check."}</p><Evidence value={check.evidence} /></div>)}</div>}
       {compact && onConnections && <button className="text-button mt-5" onClick={onConnections}>Connect n8n and infrastructure<ArrowRightIcon /></button>}
     </section>
 
     {!compact && <>
       <section className="panel p-6" aria-label="n8n workflow inspection"><div className="flex justify-between gap-3"><div><p className="eyebrow">AUTOMATIONS</p><h2 className="mt-2 text-lg font-medium">Inspect n8n workflows</h2></div><LightningBoltIcon className="size-5 text-emerald-600" /></div>
         <p className="mt-3 text-sm leading-6 text-slate-500">Read saved workflow executions and inspect failed steps. This does not activate, edit, or retry a workflow.</p>
+        <div className="mt-4 rounded-lg border border-slate-800 p-4"><h3 className="text-sm font-medium">Error Trigger reports</h3><p className="mt-2 text-xs leading-6 text-slate-400">{capabilities?.n8n_reports?.enabled ? `Reporting is enabled for ${capabilities.n8n_reports.workflow_count} registered workflows. Validate the reporter with a separate test workflow before relying on it.` : "Not connected. A separate n8n error workflow can report new failures without using the trial-blocked public API."} Only workflow and execution IDs are accepted. No customer messages, stack traces or node data are sent.</p><button className="button-secondary mt-3" disabled={!!pending || !capabilities?.n8n_reports?.enabled} onClick={async () => { const result = await command<FailureReports>({ action: "n8n_reports" }); if (result) setReports(result); }}>Load received failure reports</button>{reports && <div className="mt-4 space-y-3"><p className="text-xs leading-6 text-slate-400">Up to 25 received notifications. Receipt time is not execution time. No reports does not establish healthy workflows. Manual runs and trigger failures may not report.</p>{!reports.reports.length && <p className="text-sm">No failure reports received in this page.</p>}{reports.reports.map((report) => <div key={report.id} className="border-t border-slate-800 pt-3"><p className="text-sm">{report.component.replace("workflow:", "Workflow ")} · Failure reported</p><p className="mt-1 text-xs text-slate-400">Received {new Date(report.observed_at).toLocaleString()}</p><Evidence value={report.payload} /></div>)}</div>}</div>
         <p className="mt-3 text-sm">{!capabilities ? "Checking configuration…" : capabilities.n8n.mode === "disabled" || !capabilities.n8n.configured ? "Needs connection: add your n8n API address and API key in the backend’s protected settings." : capabilities.n8n.synthetic ? "Synthetic demo connection. No real n8n instance is contacted." : "Live connection configured. A successful read is still required to verify access."}</p>
         <details className="mt-4 text-xs leading-6 text-slate-400"><summary>Connection setup</summary><p className="mt-2">An operator must set N8N_MODE=live, N8N_BASE_URL to your instance’s /api/v1 address, and N8N_API_KEY in Render’s protected environment settings. Use read access where available. Keep keys out of questions and website addresses.</p><p className="mt-2">n8n Cloud free trials do not include public API access. An API-enabled account or a separate self-hosted instance is required. <a className="underline" href="https://support.n8n.io/article/can-i-have-api-access-while-im-on-a-trial" target="_blank" rel="noreferrer">See n8n’s availability policy</a>.</p></details>
         <div className="mt-4 flex flex-wrap gap-3"><button className="button-secondary" disabled={!!pending || !capabilities?.n8n.configured || capabilities.n8n.mode === "disabled"} onClick={() => void inspect({ action: "n8n_workflows" })}>List workflows</button><button className="button-secondary" disabled={!!pending || !capabilities?.n8n.configured || capabilities.n8n.mode === "disabled"} onClick={() => void inspect({ action: "n8n_failed" })}>Find failed executions</button></div>

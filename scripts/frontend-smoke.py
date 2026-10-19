@@ -37,11 +37,18 @@ def main():
                     result = snapshot.json()
                     require(result["health"]["data"]["status"] == "ok", "Liveness missing")
                     require(len(result["incidents"]["data"]) == 1, "Incident missing")
-                    require(result["actions"]["data"][0]["state"] == "PENDING", "Action missing")
                     require(
-                        "SYNTHETIC_PRIVATE_DATA" not in snapshot.text, "Private fixture data leaked"
+                        result["actions"]["data"][0]["state"] == "PENDING",
+                        "Action missing",
                     )
-                    require(snapshot.headers["cache-control"] == "no-store", "Dashboard cached")
+                    require(
+                        "SYNTHETIC_PRIVATE_DATA" not in snapshot.text,
+                        "Private fixture data leaked",
+                    )
+                    require(
+                        snapshot.headers["cache-control"] == "no-store",
+                        "Dashboard cached",
+                    )
                     require(
                         frontend.get("/api/dashboard", headers={"Host": "evil.test"}).status_code
                         == 403,
@@ -62,11 +69,23 @@ def main():
                         "Originless mutation accepted",
                     )
                     for path in ("/api/actions", "/api/recovery", "/api/resolve"):
-                        require(frontend.post(path).status_code == 404, "Unexpected write route")
+                        require(
+                            frontend.post(path).status_code == 404,
+                            "Unexpected write route",
+                        )
                     page = browser.new_page(viewport={"width": 1536, "height": 1080})
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     page.goto(str(frontend.base_url) + "/dashboard")
                     expect(page.get_by_role("heading", name="Reliability overview")).to_be_visible()
+                    expect(
+                        page.get_by_role(
+                            "heading",
+                            name="Three things to check. One agent to investigate.",
+                        )
+                    ).to_be_visible()
+                    expect(
+                        page.get_by_text("There is no continuous monitoring schedule.", exact=False)
+                    ).to_be_visible()
                     expect(page.get_by_text("One incident needs a closer look.")).to_be_visible()
                     page.get_by_label("Website URL", exact=True).fill("https://example.com/health")
                     page.get_by_role("button", name="Save website", exact=True).click()

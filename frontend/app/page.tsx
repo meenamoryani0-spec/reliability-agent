@@ -18,7 +18,7 @@ export default function Page() {
           <h1 id="hero-heading">Find the failure.<br /><span>Follow the<br className="desktop-break" /> evidence.</span></h1>
           <p>Your website, automations, and infrastructure tell parts of the story. Bring the evidence together—and see what needs your attention.</p>
           <div className="hero-actions"><Link className="landing-button" href="/dashboard">Open the workspace<ArrowRightIcon /></Link></div>
-          <div className="hero-assurance"><LockClosedIcon />Evidence before conclusions. Your approval before action.</div>
+          <div className="hero-assurance"><LockClosedIcon />Product introduction · Open the workspace to set up and run checks.</div>
           <div className="hero-context"><span><GlobeIcon />Website</span><span><LightningBoltIcon />Automations</span><span><LayersIcon />Infrastructure</span></div>
         </div>
         <WorkflowPreview />
@@ -38,7 +38,7 @@ export default function Page() {
           ["04", "Verify", "Inspect the exact new execution. Resolve only when the required proof passes."],
         ].map(([number, title, text]) => <article key={number}><span className="method-number">{number}<ArrowRightIcon /></span><h3>{title}<span>.</span></h3><p>{text}</p></article>)}</div></div></section>
       <section id="boundaries" className="boundaries-section landing-width"><div><span className="landing-eyebrow"><LockClosedIcon />CONTROL IS PART OF THE PRODUCT</span><h2>An agent with initiative.<br /><span>And boundaries.</span></h2><p>Useful autonomy needs a clear line between observing a system and changing it.</p><Link className="landing-link" href="/dashboard">Review the evidence<ArrowRightIcon /></Link></div><div className="boundary-list"><article><CheckIcon /><div><h3>Bounded tools. Explicit targets.</h3><p>No arbitrary shell, SQL, or remediation tools for the model.</p></div></article><article><CheckIcon /><div><h3>Your approval is specific.</h3><p>One action, a short approval window, and a durable audit trail.</p></div></article><article><CheckIcon /><div><h3>Uncertainty stays visible.</h3><p>A successful node does not prove customer delivery. Unsupported causes stay unknown.</p></div></article></div></section>
-      <section className="landing-cta landing-width"><div className="cta-coordinate">RELIABILITY / OPERATOR WORKSPACE</div><div><h2>Your next step,<br /><span>with the evidence behind it.</span></h2><Link className="landing-button" href="/dashboard">Open the dashboard<ArrowTopRightIcon /></Link></div><p>Explore the operator application. Synthetic evidence is labeled inside the workspace; live integrations remain unverified.</p><TargetIcon className="cta-radar" aria-hidden="true" /></section>
+      <section className="landing-cta landing-width"><div className="cta-coordinate">RELIABILITY / OPERATOR WORKSPACE</div><div><h2>Your next step,<br /><span>with the evidence behind it.</span></h2><Link className="landing-button" href="/dashboard">Open the dashboard<ArrowTopRightIcon /></Link></div><p>This page uses illustrative examples. Open the dashboard to see your actual connections and recorded checks. Website checks run on request; n8n, infrastructure and live AI each require setup.</p><TargetIcon className="cta-radar" aria-hidden="true" /></section>
     </main>
     <footer className="landing-footer landing-width"><Link href="/" className="landing-brand"><TargetIcon />reliability.</Link><p>Built for evidence. Operated by people.</p><span>AI RELIABILITY AGENT</span><a href="#main">Back to top</a></footer>
   </div>;

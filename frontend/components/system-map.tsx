@@ -3,7 +3,7 @@ import type { Check } from "@/lib/contracts";
 import { isStale } from "@/lib/presentation";
 
 const systems = [
-  { category: "website", title: "Websites & APIs", subtitle: "Availability and browser flows", icon: GlobeIcon, number: "01" },
+  { category: "website", title: "Websites & APIs", subtitle: "HTTP, DNS and certificate observations", icon: GlobeIcon, number: "01" },
   { category: "n8n", title: "Automations", subtitle: "n8n execution evidence", icon: LightningBoltIcon, number: "02" },
   { category: "infrastructure", title: "Infrastructure", subtitle: "Database and platform signals", icon: LayersIcon, number: "03" },
 ] as const;

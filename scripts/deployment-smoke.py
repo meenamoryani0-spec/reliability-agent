@@ -80,6 +80,23 @@ def main():
                     require(response.status_code == 307, "Unauthenticated dashboard rendered")
                     require(response.headers["location"] == "/login", "Wrong sign-in redirect")
                     require(client.get("/login").status_code == 200, "Login page failed")
+                    navigation = {
+                        "Sec-Fetch-Site": "cross-site",
+                        "Sec-Fetch-Mode": "navigate",
+                        "Sec-Fetch-Dest": "document",
+                    }
+                    require(
+                        client.get("/dashboard", headers=navigation).status_code == 307,
+                        "External link could not reach sign-in",
+                    )
+                    require(
+                        client.get("/login", headers=navigation).status_code == 200,
+                        "External sign-in navigation failed",
+                    )
+                    require(
+                        client.get("/api/dashboard", headers=navigation).status_code == 403,
+                        "Cross-site API navigation accepted",
+                    )
                     require(client.get("/api/dashboard").status_code == 403, "API is public")
                     require(
                         client.post("/api/session", json={"key": operator}).status_code == 403,

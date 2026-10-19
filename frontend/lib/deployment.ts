@@ -43,7 +43,7 @@ export function backendOrigin(environment: Environment = process.env): string {
 }
 
 // Authority comes from exact operator configuration/Host, never X-Forwarded-*.
-export function sameOrigin(request: Request, mutation = false): boolean {
+export function sameOrigin(request: Request, mutation = false, pageNavigation = false): boolean {
   try {
     const config = deployment();
     const host = request.headers.get("host");
@@ -55,6 +55,11 @@ export function sameOrigin(request: Request, mutation = false): boolean {
     const origin = request.headers.get("origin");
     if (origin && origin !== target.origin) return false;
     if (mutation && (origin !== target.origin || request.headers.get("content-type")?.split(";")[0].trim() !== "application/json")) return false;
-    return request.headers.get("sec-fetch-site") !== "cross-site";
+    if (request.headers.get("sec-fetch-site") !== "cross-site") return true;
+    // External links may navigate to public pages. This exception is selected
+    // only by HTML page handlers; API calls and mutations keep their boundary.
+    return pageNavigation && !mutation && request.method === "GET"
+      && request.headers.get("sec-fetch-mode") === "navigate"
+      && request.headers.get("sec-fetch-dest") === "document";
   } catch { return false; }
 }

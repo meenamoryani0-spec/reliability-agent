@@ -29,6 +29,7 @@ export function actionLabel(action: Action, now: number): string {
   return ({ ACCEPTED: "Retry accepted", EXECUTING: "Dispatch in progress", REJECTED: "Retry rejected", UNKNOWN: "Dispatch uncertain" })[action.state];
 }
 export function summary(check: Check): string {
+  if (check.kind === "failure_report") return "n8n reported an execution failure. Receipt time is not execution time; node details and cause are unavailable.";
   return typeof check.payload.summary === "string" ? check.payload.summary : `${humanize(check.kind)} observation`;
 }
 export function componentLabel(check: Check): string {

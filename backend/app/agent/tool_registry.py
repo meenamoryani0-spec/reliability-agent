@@ -87,6 +87,15 @@ SPECS = (
 )
 
 
+REPORT_SPEC = ToolSpec(
+    "read_n8n_failure_reports",
+    "Read up to 25 received Error Trigger notifications. IDs only, no node details. "
+    "Receipt times are not execution times. An empty list does not prove health.",
+    Arguments,
+    10,
+)
+
+
 class BoundaryError(ValueError):
     def __init__(self, code):
         self.code = code
@@ -117,13 +126,14 @@ class ToolRegistry:
         self._specs = MappingProxyType(
             {
                 spec.name: spec
-                for spec in SPECS
+                for spec in (*SPECS, *((REPORT_SPEC,) if config.n8n_events_enabled else ()))
                 if config.environment != "production" or spec.name != "test_website_flow"
             }
         )
         self._handlers = MappingProxyType(
             {
                 "list_website_targets": self._list_websites,
+                "read_n8n_failure_reports": self._reports,
                 "check_website_http": partial(self._website, website_checker.check_http),
                 "check_dns": partial(self._website, website_checker.check_dns),
                 "check_ssl": partial(self._website, website_checker.check_ssl),
@@ -345,6 +355,31 @@ class ToolRegistry:
         if result.component != target.id:
             raise BoundaryError("invalid_result")
         return result, target.url
+
+    async def _reports(self, _):
+        from app.api.n8n_reports import recent_reports
+
+        rows = await recent_reports(self._history, self._config)
+        return {
+            "service": "n8n",
+            "check_type": "failure_report",
+            "synthetic": False,
+            "status": "UNHEALTHY" if rows else "UNKNOWN",
+            "component": rows[0]["component"] if rows else "configured-n8n-reports",
+            "evidence": rows[0]["payload"]["evidence"] if rows else {},
+            "reports": [
+                {
+                    "check_id": row["id"],
+                    "component": row["component"],
+                    "received_at": str(row["observed_at"]),
+                    "evidence": row["payload"]["evidence"],
+                }
+                for row in rows
+            ],
+            "coverage": "received_failure_notifications_only",
+            "root_cause_verified": False,
+            "business_outcome_verified": False,
+        }, None
 
     async def _browser(self, checker, arguments):
         result = await checker.check(arguments.flow_id)

@@ -47,6 +47,7 @@ def configured_secrets(config):
             config.nebius_api_key,
             config.api_access_token,
             config.n8n_api_key,
+            config.n8n_events_token,
             config.vercel_token,
             config.supabase_access_token,
             config.postgres_password,
