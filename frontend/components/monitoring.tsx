@@ -7,6 +7,7 @@ import { monitoringSchema, type FailureReports, type Monitoring, type N8nResults
 import { Evidence, Notice, Source, Status } from "./primitives";
 import { humanize } from "@/lib/presentation";
 import { ProjectGuide } from "./project-guide";
+import { WebsiteScheduleStatus } from "./website-schedule";
 
 const errorMessage = (code: string | null) => code === "invalid_input"
   ? "Use a public http:// or https:// address without a password, query string, or fragment."
@@ -18,6 +19,7 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections, ov
   onComplete: () => Promise<void>; compact?: boolean; onConnections?: () => void; overview?: Snapshot; now?: number;
 }) {
   const [capabilities, setCapabilities] = useState<Monitoring | null>(null);
+  const [capabilitiesFetchedAt, setCapabilitiesFetchedAt] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [url, setUrl] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections, ov
       const envelope = await response.json();
       const parsed = monitoringSchema.safeParse(envelope.data);
       if (!response.ok || !parsed.success) throw new Error("unavailable");
-      setCapabilities(parsed.data); setLoadError(false);
+      setCapabilities(parsed.data); setCapabilitiesFetchedAt(Date.now()); setLoadError(false);
     } catch { if (!signal?.aborted) setLoadError(true); }
   }, []);
   useEffect(() => { const controller = new AbortController(); const initial = window.setTimeout(() => void load(controller.signal), 0); return () => { window.clearTimeout(initial); controller.abort(); }; }, [load]);
@@ -67,11 +69,11 @@ export function MonitoringPanel({ onComplete, compact = false, onConnections, ov
   }
 
   return <div className="monitoring space-y-6">
-    {overview && <ProjectGuide settings={capabilities} data={overview} now={now} onConnections={onConnections} />}
+    {overview && <ProjectGuide settings={capabilities} data={overview} now={Math.max(now, capabilitiesFetchedAt)} onConnections={onConnections} />}
     <section id="website-setup" className="panel p-6" aria-label="Website setup and checks">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">START WITH A REAL SYSTEM</p><h2 className="mt-2 text-lg font-medium">Connect your website</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">Save a website address, then check its response, DNS, and security certificate. No AI key is needed.</p></div><GlobeIcon className="size-5 text-emerald-600" /></div>
       <form onSubmit={(event) => void register(event)} className="mt-5 flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 text-xs text-slate-400" htmlFor="website-url">Website URL<input id="website-url" type="url" required maxLength={2048} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com" className="mt-2 w-full" disabled={!!pending || !capabilities || !!capabilities.websites.error} /></label><button className="button-primary" disabled={!!pending || !capabilities || !!capabilities.websites.error}>{pending === "register_website" ? "Saving…" : "Save website"}</button></form>
-      <p className="mt-3 text-xs leading-5 text-slate-400">Manual checks only. These checks do not submit forms, create bookings, or prove every business flow works. Refresh records reloads saved evidence.</p>
+      <div className="mt-3 text-xs leading-5 text-slate-400"><WebsiteScheduleStatus settings={capabilities} now={Math.max(now, capabilitiesFetchedAt)} />{capabilities?.automatic_monitoring && <button className="text-button mt-2" onClick={() => void load()} disabled={!!pending}>Reload monitoring status</button>}<p>These checks do not submit forms, create bookings, or prove every business flow works. Refresh records reloads saved evidence.</p></div>
       {loadError && <div className="mt-4"><Notice>Connection settings are unavailable. The backend may be waking up. <button className="text-button" onClick={() => void load()}>Reload connections</button></Notice></div>}
       {capabilities?.websites.error && <div className="mt-4"><Notice>Website setup needs working application storage and its latest migration. Existing evidence is retained.</Notice></div>}
       {message && <div className="mt-4"><Notice>{message}</Notice></div>}

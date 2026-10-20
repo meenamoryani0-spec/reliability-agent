@@ -27,7 +27,9 @@ reports remain in PHASE-*.md, RENDER-ROLLOUT.md and VERCEL-ROLLOUT.md.
   project environment. The signed-in account currently opens billing setup;
   credits and a usable key have not been verified. Spending remains at ₹0.
 - Automatic incident creation: off in the last verified live configuration.
-- Continuous scheduling: not implemented. Render Free may sleep.
+- Automatic website checks: an opt-in process-local timer is implemented locally,
+  disabled by default. It has not been deployed or activated. It cannot run while
+  the backend sleeps or stops. Read WEBSITE-SCHEDULE.md for configuration and limits.
 - Production remediation, retry and recovery: disabled. Local CLI behavior is
   separately tested; there are no production approval/dispatch/resolve routes.
 - Real customer browser flows are not configured. Synthetic fixtures are labeled
@@ -55,10 +57,19 @@ a separate ingest-only token, deduplicates immutable history and can link
 incidents when that policy is enabled. It does not poll the public API or retain
 customer payloads. No new migration is required. Read FREE-N8N-REPORTING.md.
 
-An inactive reporter draft exists in the user's n8n Personal project at its root.
-It was SDK-validated and tested with pinned synthetic data; the network request
-was simulated. The three existing business workflows were not edited. Private
-credential setup, approved attachment and live delivery acceptance remain pending.
+The user's approved reporter is active in the n8n Personal project at its root.
+A dedicated ingest-only credential is stored privately in n8n and Render. The
+error handler is attached to hdworksAI tele, Operations Telegram Bot, and Employee
+Website Intake. Their business nodes, connections, published version IDs and
+unrelated draft differences were verified preserved.
+
+A separate isolated test workflow failed through its production webhook and
+invoked the reporter in error mode. The real HTTP request was accepted, persisted,
+and displayed in the authenticated dashboard. The test workflow was deactivated
+and archived; its temporary allowlist entry was removed. The final backend
+allowlist contains the three business workflows. The saved test observation is
+test evidence, not proof of a business workflow failure. Automatic incidents
+remain off. ID-only reporting does not establish failed-node detail or root cause.
 
 This is a partially connected product, not a completed live reliability loop.
 Do not claim all integrations, automatic monitoring, diagnoses or repair work

@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { GET, POST } from "../app/api/monitoring/route";
-import { operatorRequestSchema } from "../lib/monitoring";
+import { monitoringSchema, operatorRequestSchema } from "../lib/monitoring";
 
 const originalFetch = globalThis.fetch;
+
+test("monitoring accepts bounded scheduler activity without claiming website health", () => {
+  const data = {
+    websites: { targets: [], error: null }, n8n: { mode: "disabled", configured: false, synthetic: false },
+    infrastructure: { mode: "disabled", synthetic: false, checks: [] }, automatic_monitoring: true,
+    website_schedule: { enabled: true, interval_seconds: 300, state: "waiting", last_started_at: null,
+      last_finished_at: null, last_outcome: "storage_unavailable", last_checks_saved: 0,
+      cycles_started: 1, coverage: "registered_websites_while_backend_running" },
+  };
+  assert.equal(monitoringSchema.safeParse(data).success, true);
+  assert.equal(monitoringSchema.safeParse({ ...data, website_schedule: { ...data.website_schedule, interval_seconds: 0 } }).success, false);
+  assert.equal(monitoringSchema.safeParse({ ...data, website_schedule: { ...data.website_schedule, last_checks_saved: 76 } }).success, false);
+  assert.equal(monitoringSchema.safeParse({ ...data, website_schedule: undefined, automatic_monitoring: false }).success, true);
+});
 afterEach(() => { globalThis.fetch = originalFetch; });
 const request = (body: unknown, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/monitoring", {
   method: "POST", headers: { Host: "localhost:3000", Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),

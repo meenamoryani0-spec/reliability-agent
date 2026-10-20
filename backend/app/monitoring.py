@@ -11,6 +11,10 @@ from app.db.repository import StorageError
 from app.tools.models import WebsiteTarget
 
 
+class WebsiteCheckBusy(Exception):
+    pass
+
+
 class SavedWebsiteTarget(Base):
     __tablename__ = "website_targets"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -89,6 +93,42 @@ class WebsiteTargets:
         target = WebsiteTarget(id=identifier, url=url)
         targets = await self._call(target)
         return next(value for value in targets.values() if value.url == target.url)
+
+    async def check(self, target, checker, *, on_capture=None):
+        if self.closed:
+            raise StorageError("storage_unavailable")
+        if self.check_busy:
+            raise WebsiteCheckBusy()
+        self.check_busy = True
+
+        async def run():
+            try:
+                results = []
+                for operation in (checker.check_http, checker.check_dns, checker.check_ssl):
+                    result = await operation(target)
+                    saved = await self.history.capture(result, target.url)
+                    if on_capture is not None:
+                        on_capture(saved)
+                    results.append(
+                        {
+                            "check": result.model_dump(mode="json"),
+                            "history": saved.model_dump(mode="json"),
+                        }
+                    )
+                return {"results": results, "automatic_monitoring": False}
+            finally:
+                self.check_busy = False
+
+        task = asyncio.create_task(run())
+        self.pending.add(task)
+
+        def finished(value):
+            self.pending.discard(value)
+            if not value.cancelled():
+                value.exception()
+
+        task.add_done_callback(finished)
+        return await asyncio.shield(task)
 
     async def close(self):
         self.closed = True

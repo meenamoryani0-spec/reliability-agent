@@ -9,7 +9,11 @@ The application has a verified FastAPI backend and Next.js operator workspace.
 The authenticated Vercel/Render/Supabase deployment and manual public website
 HTTP/DNS/TLS checks passed live acceptance on 19 October 2026. The dashboard now
 supports persistent website setup and explicit provider-read controls. Live n8n
-and Nebius integrations remain unverified; no background scheduler is implemented.
+and Nebius integrations remain unverified. An opt-in website timer is available
+for local validation, disabled by default; it runs only while the backend is
+awake. See [WEBSITE-SCHEDULE.md](docs/WEBSITE-SCHEDULE.md). The deployed ID-only
+n8n Error Trigger connection passed a separate real delivery test; it does not
+provide full workflow/node inspection.
 The phase sections below record incremental implementation. For the current
 boundaries, read [CURRENT-STATE.md](docs/CURRENT-STATE.md) and
 [DEPLOYMENT.md](docs/DEPLOYMENT.md).

@@ -114,7 +114,7 @@ export function Dashboard({ deployed = false }: { deployed?: boolean }) {
             const service = data.services.data?.find((s) => s.id === v.service_id);
             return service ? includeSource(service.synthetic) && matches(search, v.id, v.workflow_id, v.new_execution_id) : source === "all" && matches(search, v.id, v.workflow_id, v.new_execution_id);
           }).map((v) => <div key={v.id} className="border-t border-slate-100 p-6"><div className="flex flex-wrap gap-2"><Status value={v.result} />{data.services.data?.find((s) => s.id === v.service_id) && <Source synthetic={data.services.data.find((s) => s.id === v.service_id)!.synthetic} />}</div><p className="mt-3 text-sm">Execution {v.new_execution_id} · {humanize(v.reason)}</p><p className="mt-2 text-xs text-slate-400">Recorded {age(v.observed_at, now)} · n8n required nodes</p><VerificationScope /><button className="text-button mt-4" onClick={() => setSelected(v.incident_id)}>Inspect proof<ArrowTopRightIcon /></button></div>)}</section></div>}
-          {view === "Connections" && <div className="space-y-6"><MonitoringPanel onComplete={refresh} /><Connections data={data} deployed={deployed} /></div>}
+          {view === "Connections" && <div className="space-y-6"><MonitoringPanel onComplete={refresh} now={now} /><Connections data={data} deployed={deployed} /></div>}
           <footer className="workspace-footer"><span className="flex items-center gap-2"><span className={`size-1.5 rounded-full ${data.health.data ? "bg-emerald-600" : "bg-slate-400"}`} />Backend process {data.health.data ? "reachable" : "unavailable"}<span className="hidden sm:inline">· liveness only</span></span><span>Records fetched {age(data.fetchedAt, now)} · Manual refresh</span></footer>
         </>}
       </main>

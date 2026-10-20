@@ -26,6 +26,7 @@ from app.tools.infrastructure import InfrastructureService
 from app.tools.n8n import N8nClient, N8nService
 from app.tools.n8n_fixtures import fixture_client
 from app.tools.website import WebsiteChecker
+from app.website_schedule import WebsiteSchedule
 
 logger = logging.getLogger("reliability_agent")
 
@@ -46,17 +47,23 @@ def create_app(
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         configure_logging(config.log_level)
         logger.info("Backend started (environment=%s)", config.environment)
+        application.state.website_schedule.start()
         try:
             yield
         finally:
             try:
-                try:
-                    await application.state.investigator.close()
-                finally:
-                    await application.state.tool_registry.close()
+                await application.state.website_schedule.close()
             finally:
-                await application.state.operator_targets.close()
-                await history.close()
+                try:
+                    try:
+                        await application.state.investigator.close()
+                    finally:
+                        await application.state.tool_registry.close()
+                finally:
+                    try:
+                        await application.state.operator_targets.close()
+                    finally:
+                        await history.close()
             logger.info("Backend stopped")
 
     application = FastAPI(
@@ -77,6 +84,12 @@ def create_app(
         nameservers=config.website_dns_nameservers
     )
     application.state.browser_checker = browser_checker or BrowserChecker()
+    application.state.website_schedule = WebsiteSchedule(
+        config,
+        application.state.operator_targets,
+        application.state.website_checker,
+        history,
+    )
     n8n_client = None
     if config.n8n_mode == "fixture":
         n8n_client = fixture_client()
