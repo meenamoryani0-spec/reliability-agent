@@ -467,21 +467,28 @@ def test_deadline_and_cancellation_keep_slot_until_actual_work_finishes():
 
 def test_slow_storage_returns_observation_while_slot_stays_busy():
     async def run():
-        release = asyncio.Event()
+        entered, release = asyncio.Event(), asyncio.Event()
 
         async def capture(*_):
+            entered.set()
             await release.wait()
             return HistoryCapture(status="disabled")
 
         registry = configured_app().state.tool_registry
         registry._history = Mock(capture=capture)
-        short_deadline(registry, "check_postgres")
-        result = await registry.execute("check_postgres", "{}")
-        assert result.status == "OK" and result.data["status"] == "HEALTHY"
-        assert result.history.status == "unavailable"
-        assert (await registry.execute("check_postgres", "{}")).reason == "busy"
-        release.set()
-        await registry.close()
+        # This tests blocked storage, not fixture adapter speed on a busy laptop.
+        specs = dict(registry._specs)
+        specs["check_postgres"] = replace(specs["check_postgres"], timeout_seconds=1)
+        registry._specs = MappingProxyType(specs)
+        try:
+            result = await registry.execute("check_postgres", "{}")
+            assert entered.is_set()
+            assert result.status == "OK" and result.data["status"] == "HEALTHY"
+            assert result.history.status == "unavailable"
+            assert (await registry.execute("check_postgres", "{}")).reason == "busy"
+        finally:
+            release.set()
+            await registry.close()
 
     asyncio.run(run())
 

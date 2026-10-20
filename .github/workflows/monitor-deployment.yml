@@ -1,0 +1,30 @@
+name: Monitor deployed application
+
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/monitor-deployment.yml'
+      - 'scripts/deployment_probe.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor-deployed-application
+  cancel-in-progress: false
+
+jobs:
+  public-readiness:
+    if: github.repository == 'meenamoryani0-spec/reliability-agent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Probe frontend liveness and backend readiness
+        run: python3 scripts/deployment_probe.py

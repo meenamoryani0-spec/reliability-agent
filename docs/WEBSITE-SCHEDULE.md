@@ -55,11 +55,27 @@ Connections or reloading the page also fetches that snapshot.
 ## Runtime limits
 
 This is a timer inside the single backend process. It cannot run while that
-process is sleeping, stopped or unavailable. Missed scans are not replayed, and
-there is no external wake-up service, distributed scheduler or durable job
-queue. It does not establish always-on monitoring on a free hosting tier.
+process is sleeping, stopped or unavailable. Missed scans are not replayed.
+There is no distributed scheduler or durable job queue. It does not establish
+always-on monitoring on a free hosting tier.
 
-The deployed service was not modified or activated by this local milestone.
+The separate `Monitor deployed application` GitHub Actions workflow probes the
+frontend's public liveness endpoint and the backend's public storage-readiness
+endpoint approximately every five minutes. Incoming readiness requests can wake
+the free backend. It uses no credentials, changes no application data, rejects
+redirects/HTML loading screens, and makes at most three backend read attempts.
+The workflow has a four-minute job limit. Job failures are visible in Actions;
+notification delivery depends on the operator's GitHub notification settings.
+
+This external probe is independent of the in-process website timer. It verifies
+application availability, not website business flows, n8n execution success or
+customer delivery. GitHub schedules can be delayed or dropped and public-repo
+schedules can be disabled after 60 days without repository activity. It is
+best-effort coverage, not a guaranteed interval or a service-level agreement.
+See [GitHub schedule behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+
+The timer still requires explicit deployment/configuration. A passing local
+or CI run does not establish that it has been activated in production.
 
 ## Validation commands
 
