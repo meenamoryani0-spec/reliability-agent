@@ -1,0 +1,86 @@
+name: Validate application
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests and HTTP checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install locked test dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          . ./scripts/environment.ps1
+          & $ProjectPython -m pip install --require-hashes -r backend/requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          ./scripts/browser-install.ps1
+      - name: Backend test suite, lint and formatting
+        shell: pwsh
+        run: ./scripts/test.ps1
+      - name: Actual HTTP checks against disposable fixture storage
+        shell: pwsh
+        run: |
+          ./scripts/smoke.ps1
+          . ./scripts/environment.ps1
+          & $ProjectPython scripts/website_schedule_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Website scheduler HTTP smoke failed' }
+          ./scripts/agent-smoke.ps1
+          & $ProjectPython scripts/n8n-report-smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'n8n reporting HTTP smoke failed' }
+
+  frontend:
+    name: Frontend build, authentication and browser checks
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install locked test dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          . ./scripts/frontend-environment.ps1
+          & $ProjectPython -m pip install --require-hashes -r backend/requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Python dependency installation failed' }
+          ./scripts/browser-install.ps1
+          Push-Location $FrontendRoot
+          try {
+            npm ci
+            if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed' }
+          } finally { Pop-Location }
+      - name: Frontend tests, lint, build, types and runtime dependency audit
+        shell: pwsh
+        run: ./scripts/frontend-check.ps1
+      - name: Browser and production authentication HTTP checks
+        shell: pwsh
+        run: |
+          ./scripts/frontend-smoke.ps1
+          ./scripts/deployment-smoke.ps1

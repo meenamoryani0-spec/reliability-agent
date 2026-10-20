@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     investigation_mode: Literal["disabled", "fixture", "live"] = "disabled"
     incidents_enabled: bool = False
     website_targets: list[WebsiteTarget] = Field(default_factory=list, max_length=25)
+    website_monitoring_enabled: bool = False
+    website_monitoring_interval_seconds: int = Field(default=300, ge=60, le=86400)
     website_dns_nameservers: tuple[str, ...] = Field(default=(), max_length=3)
     n8n_mode: Literal["disabled", "fixture", "live"] = "disabled"
     n8n_retry_mode: Literal["disabled", "fixture", "live"] = "disabled"
@@ -233,6 +235,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_target_ids(self) -> "Settings":
+        if self.website_monitoring_enabled and (
+            self.storage_mode == "disabled"
+            or not self.operations_access_enabled
+            or self.investigation_mode == "fixture"
+        ):
+            raise ValueError("Scheduled website checks require storage and operations access")
         if self.n8n_recovery_mode != "disabled":
             if (
                 self.environment == "production"

@@ -14,7 +14,7 @@ HIDDEN = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 @contextmanager
-def server(environment, log):
+def server(environment, log, *, application="app.main:app", factory=False):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -24,7 +24,8 @@ def server(environment, log):
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "app.main:app",
+                application,
+                *(["--factory"] if factory else []),
                 "--host",
                 "127.0.0.1",
                 "--port",

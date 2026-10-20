@@ -1,12 +1,11 @@
 """Authenticated operator setup and fixed read checks; no provider-secret writes."""
 
-import asyncio
-
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agent.safety import load_object
 from app.db.repository import StorageError
+from app.monitoring import WebsiteCheckBusy
 from app.security import require_authenticated
 from app.tools.models import WebsiteTarget
 
@@ -45,7 +44,8 @@ async def capabilities(request: Request):
             "coverage": "received_failure_notifications_only",
         },
         "infrastructure": request.app.state.infrastructure_service.describe(),
-        "automatic_monitoring": False,
+        "automatic_monitoring": request.app.state.website_schedule.enabled,
+        "website_schedule": request.app.state.website_schedule.describe(),
     }
 
 
@@ -86,29 +86,9 @@ async def check_website(request: Request, target_id: str):
         raise HTTPException(status_code=503, detail="storage_unavailable") from None
     if target is None:
         raise HTTPException(status_code=404, detail="Website target is not registered")
-    # No await between checking and occupying this per-worker slot.
-    if service.check_busy:
-        raise HTTPException(status_code=409, detail="website_check_busy")
-    service.check_busy = True
-
-    async def run():
-        try:
-            results = []
-            checker = request.app.state.website_checker
-            for check in (checker.check_http, checker.check_dns, checker.check_ssl):
-                result = await check(target)
-                saved = await request.app.state.history.capture(result, target.url)
-                results.append(
-                    {
-                        "check": result.model_dump(mode="json"),
-                        "history": saved.model_dump(mode="json"),
-                    }
-                )
-            return {"results": results, "automatic_monitoring": False}
-        finally:
-            service.check_busy = False
-
-    task = asyncio.create_task(run())
-    service.pending.add(task)
-    task.add_done_callback(service.pending.discard)
-    return await asyncio.shield(task)
+    try:
+        return await service.check(target, request.app.state.website_checker)
+    except WebsiteCheckBusy:
+        raise HTTPException(status_code=409, detail="website_check_busy") from None
+    except StorageError:
+        raise HTTPException(status_code=503, detail="storage_unavailable") from None

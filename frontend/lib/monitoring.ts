@@ -15,7 +15,13 @@ export const monitoringSchema = z.object({
   n8n_reports: z.object({ enabled: z.boolean(), workflow_count: z.number().int().min(0).max(25),
     coverage: z.literal("received_failure_notifications_only") }).optional(),
   infrastructure: z.object({ mode: providerMode, synthetic: z.boolean(), checks: z.array(z.object({ id: infrastructureId, configured: z.boolean() })).max(5) }),
-  automatic_monitoring: z.literal(false),
+  automatic_monitoring: z.boolean(),
+  website_schedule: z.object({ enabled: z.boolean(), interval_seconds: z.number().int().min(60).max(86400),
+    state: z.enum(["disabled", "starting", "checking", "waiting", "stopping", "stopped"]),
+    last_started_at: z.string().nullable(), last_finished_at: z.string().nullable(),
+    last_outcome: z.enum(["completed", "storage_unavailable", "no_targets", "stopped", "busy", "partial", "failed"]).nullable(),
+    last_checks_saved: z.number().int().min(0).max(75), cycles_started: z.number().int().min(0),
+    coverage: z.literal("registered_websites_while_backend_running") }).optional(),
 });
 export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("register_website"), url: z.string().trim().min(1).max(2048) }).strict(),

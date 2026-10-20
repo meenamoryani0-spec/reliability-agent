@@ -1,5 +1,12 @@
 # Project implementation instructions
 
+- The user's continuation authorizes local completion work while Nebius access
+  is pending. WEBSITE_MONITORING_ENABLED adds an opt-in single-process website
+  timer, disabled by default; read docs/WEBSITE-SCHEDULE.md. Preserve explicit
+  incident policy, saved-target validation, probe limits, graceful draining and
+  truthful sleep/downtime gaps. Local verification does not activate deployed
+  monitoring or establish always-on operation.
+
 - The user's 19 October request authorizes repairing setup and project clarity.
   FREE-N8N-REPORTING.md documents an optional, disabled-by-default Error Trigger
   receiver. It accepts only two IDs through a separate ingest-only token, keeps

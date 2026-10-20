@@ -84,7 +84,7 @@ def main():
                         )
                     ).to_be_visible()
                     expect(
-                        page.get_by_text("There is no continuous monitoring schedule.", exact=False)
+                        page.get_by_text("Automatic checks are off.", exact=False).first
                     ).to_be_visible()
                     expect(page.get_by_text("One incident needs a closer look.")).to_be_visible()
                     page.get_by_label("Website URL", exact=True).fill("https://example.com/health")

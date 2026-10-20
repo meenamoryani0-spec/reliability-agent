@@ -27,6 +27,7 @@ server_environment = {
     "INCIDENTS_ENABLED": "false",
     "INVESTIGATION_MODE": "fixture" if "--agent" in sys.argv else "disabled",
     "WEBSITE_TARGETS": "[]",
+    "WEBSITE_MONITORING_ENABLED": "false",
     "N8N_MODE": "fixture" if "--n8n" in sys.argv or "--agent" in sys.argv else "disabled",
     "N8N_BASE_URL": "",
     "N8N_API_KEY": "",
