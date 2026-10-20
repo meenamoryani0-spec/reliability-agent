@@ -1,4 +1,4 @@
-# Current state — 19 October 2026
+# Current state — 20 October 2026
 
 This page supersedes older phase-status statements. Historical implementation
 reports remain in PHASE-*.md, RENDER-ROLLOUT.md and VERCEL-ROLLOUT.md.
@@ -11,8 +11,20 @@ reports remain in PHASE-*.md, RENDER-ROLLOUT.md and VERCEL-ROLLOUT.md.
   role, verified TLS. Schema head: 0006_operator_targets.
 - Single-operator login, authenticated backend calls, history persistence and
   logout passed live HTTPS acceptance.
-- hdworks.tech was saved and manually checked through the dashboard. Its HTTP,
-  DNS and TLS checks passed at the time recorded in history.
+- hdworks.tech is saved persistently. Two consecutive automatic cycles completed
+  at 11:28 and 11:33 UTC on 20 October and each saved healthy HTTP, DNS and TLS
+  checks. No manual Run checks request was used for the second-cycle proof.
+- The backend website timer is enabled with a 300-second interval after each
+  cycle. It runs only while the single backend process is running. Free-host
+  sleep, restarts and network failures can leave gaps; there is no backfill.
+- Automatic incident recording is enabled for persisted unhealthy observations.
+  Incident behavior passed controlled local fixtures; no production failure was
+  manufactured. Healthy checks cannot automatically close incidents.
+- A GitHub Actions workflow checks the fixed public backend /ready and frontend
+  /api/health URLs. Its initial push-triggered run passed. Its approximately
+  five-minute schedule is best effort; scheduled execution was not yet observed
+  at this verification point. This is application readiness, not provider or
+  business-outcome verification. See DEPLOYMENT.md for limitations.
 - A website URL can be saved in Overview, then checked with Run checks.
   Refresh records only reloads history. Results become stale.
 
@@ -23,13 +35,10 @@ reports remain in PHASE-*.md, RENDER-ROLLOUT.md and VERCEL-ROLLOUT.md.
 - Infrastructure monitoring: disabled. A provider login used to deploy the app
   does not give the backend a management token. Application storage credentials
   are separate from monitored database credentials.
-- Nebius investigation: disabled. No provider key is configured in the known
-  project environment. The signed-in account currently opens billing setup;
-  credits and a usable key have not been verified. Spending remains at ₹0.
-- Automatic incident creation: off in the last verified live configuration.
-- Automatic website checks: an opt-in process-local timer is implemented locally,
-  disabled by default. It has not been deployed or activated. It cannot run while
-  the backend sleeps or stops. Read WEBSITE-SCHEDULE.md for configuration and limits.
+- AI investigation: disabled. Nebius is optional for the personal-use project;
+  neither it nor an alternative provider has passed a live inference test. Groq
+  Free was researched as a candidate, but this user's account/key access was not
+  established. No model-provider billing was activated or inference key created.
 - Production remediation, retry and recovery: disabled. Local CLI behavior is
   separately tested; there are no production approval/dispatch/resolve routes.
 - Real customer browser flows are not configured. Synthetic fixtures are labeled
@@ -39,7 +48,13 @@ The connected n8n app available to this Codex chat can read the user's workflows
 Those chat credentials are not a deployed backend integration. Historical failed
 executions do not prove the current workflow version is still failing.
 
-## Current repair milestone
+## Current verification milestone
+
+PR #1 merged the website timer, schedule status, bounded public deployment probe,
+and continuous integration. Both final CI jobs passed, including backend tests
+and real loopback HTTP smokes plus frontend checks, build and Chromium acceptance.
+The backend and frontend run that merged code. A fresh deployed HTTPS
+login/storage acceptance test also passed after the production frontend rollout.
 
 The overview now explains Website, n8n, Infrastructure and Reliability Agent,
 shows configuration separately from evidence, and says when AI and incidents are
@@ -68,16 +83,19 @@ invoked the reporter in error mode. The real HTTP request was accepted, persiste
 and displayed in the authenticated dashboard. The test workflow was deactivated
 and archived; its temporary allowlist entry was removed. The final backend
 allowlist contains the three business workflows. The saved test observation is
-test evidence, not proof of a business workflow failure. Automatic incidents
-remain off. ID-only reporting does not establish failed-node detail or root cause.
+test evidence, not proof of a business workflow failure. On 20 October the reporter
+was rechecked as active with its published version matching its draft; no business
+workflow was executed or modified. ID-only reporting does not establish failed-node
+detail or root cause. New qualifying reports can create incidents under the now
+enabled backend policy; that path was not retested with a production failure.
 
 This is a partially connected product, not a completed live reliability loop.
-Do not claim all integrations, automatic monitoring, diagnoses or repair work
-until their separate live acceptance tests pass.
+Do not claim complete integration coverage, continuous monitoring, AI diagnoses
+or repair work until their separate live acceptance tests pass.
 
 ## Architecture in ordinary language
 
 Vercel serves the screen. Render runs the checks and investigator. Supabase saves
 this app's evidence and history. The website, n8n and monitored infrastructure are
-inputs to the backend. Nebius supplies the AI model when explicitly enabled with
-credits. The frontend does not receive provider secrets.
+inputs to the backend. An explicitly configured AI provider would supply the
+model; none is currently enabled. The frontend does not receive provider secrets.

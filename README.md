@@ -5,15 +5,20 @@ n8n/business automation, and infrastructure failures using operational evidence.
 
 ## Release status
 
-The application has a verified FastAPI backend and Next.js operator workspace.
-The authenticated Vercel/Render/Supabase deployment and manual public website
-HTTP/DNS/TLS checks passed live acceptance on 19 October 2026. The dashboard now
-supports persistent website setup and explicit provider-read controls. Live n8n
-and Nebius integrations remain unverified. An opt-in website timer is available
-for local validation, disabled by default; it runs only while the backend is
-awake. See [WEBSITE-SCHEDULE.md](docs/WEBSITE-SCHEDULE.md). The deployed ID-only
-n8n Error Trigger connection passed a separate real delivery test; it does not
-provide full workflow/node inspection.
+The personal-use application has an authenticated Vercel/Render/Supabase
+deployment. On 20 October 2026, two consecutive automatic website cycles saved
+healthy HTTP, DNS and TLS checks for hdworks.tech. The five-minute website timer
+and automatic incident recording are enabled in the deployed backend. The timer
+runs only while that backend is awake; it does not guarantee continuous coverage.
+See [WEBSITE-SCHEDULE.md](docs/WEBSITE-SCHEDULE.md). A GitHub Actions workflow also
+checks public application readiness; its initial push-triggered run passed.
+Scheduled delivery remains subject to GitHub delays and missed runs.
+
+The deployed ID-only n8n Error Trigger connection passed a separate real delivery
+test; it does not provide full workflow/node inspection. Live AI investigation,
+infrastructure adapters and production remediation remain disabled. Nebius and
+hackathon participation are no longer requirements. No paid resources or billing
+changes were used for this update.
 The phase sections below record incremental implementation. For the current
 boundaries, read [CURRENT-STATE.md](docs/CURRENT-STATE.md) and
 [DEPLOYMENT.md](docs/DEPLOYMENT.md).
